@@ -17,7 +17,7 @@ You must provide a "Config.json" file with:
 ```
 	
 Start the bot with:  
-```    bash start.sh```
+```bash start.sh```
 	
 When it's running, use the following help commands:
 ```

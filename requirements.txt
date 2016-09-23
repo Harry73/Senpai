@@ -1,0 +1,7 @@
+discord.py==0.11.0
+beautifulsoup4==4.5.1
+mtgsdk==1.2.0
+praw==3.5.0
+pyparsing==2.1.8
+youtube_dl==2016.9.4.1
+pynacl==1.0.1
