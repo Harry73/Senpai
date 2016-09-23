@@ -87,7 +87,8 @@ async def help(request):
 	clips_commands = ["/{0}".format(clip) for clip in clips]
 	
 	if not request:
-		help_text += "Sounds: \n" + ", ".join(clips_commands) + "```"
+		help_text += "Sounds: \n" + ", ".join(clips_commands) + "```\n\n"
+		help_text += "https://github.com/Harry73/Senpai"
 		return help_text
 	else:
 		if request in regular_commands:
