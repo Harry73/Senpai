@@ -1,0 +1,2 @@
+# Senpai
+A discord bot
