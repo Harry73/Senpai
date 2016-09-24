@@ -6,7 +6,6 @@ owner_help_text = """```Commands:
 /secrets                -> Shows the owner commands
 /test                   -> Senpai will say hi to you
 /profile <image_url>    -> Change profile picture
-/daily                  -> Force Daily.py to run
 /sudoku                 -> Kill Senpai
 ```"""
 

@@ -118,9 +118,6 @@ async def handle_message(client, message):
 
 		elif message.content.startswith("/profile"):
 			await Profile.edit_profile(client, image_url=message.content[8:].strip())
-
-		elif message.content.startswith("/daily"):
-			await Hentai.post()
 			
 		# Stops the "forever" process that is used to run the bot, thus killing the bot on comman
 		elif message.content.startswith("/sudoku"):
