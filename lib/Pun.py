@@ -24,7 +24,7 @@ async def pun():
 
 	if text:
 		logger.debug("Found pun: {0}".format(text))
-		return text
+		return {"message": text}
 	else:
 		logger.info("Something went wrong.")
-		return "I don't know what happened, but no puns were found."
+		return {"message": "I don't know what happened, but no puns were found."}

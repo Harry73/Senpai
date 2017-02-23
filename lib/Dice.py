@@ -7,6 +7,7 @@ import operator
 logger = logging.getLogger("Senpai")
 
 totalDice = 0
+crypto = SystemRandom()
 
 # Used to evalute an expression string
 class NumericStringParser(object):
@@ -162,7 +163,6 @@ def roll_dice(dice):
 			raise RuntimeError("Numbers too big")
 
 		rolls = []
-		crypto = SystemRandom()
 		for r in range(number):
 			rolls.append(crypto.randint(1, limit))
 
@@ -180,6 +180,10 @@ def roll_dice(dice):
 
 # Figure out what a roll means and evaluate any expressions
 async def parse_roll(dice_string):
+	if dice_string == "stats":
+		response = await stats()
+		return {"message": response}
+	
 	logger.debug("Rolling: {0}".format(dice_string))
 
 	global totalDice
@@ -197,7 +201,7 @@ async def parse_roll(dice_string):
 		dice_array = splitarray(dice_array, ")")
 	except Exception as e:
 		logger.exception(e)
-		return "I can't cope with whatever the hell you just tried to give me."
+		return {"message": "I can't cope with whatever the hell you just tried to give me."}
 
 	# Roll for an NdM parts and substitute in the result in parenthesis
 	for index, item in enumerate(dice_array):
@@ -209,13 +213,13 @@ async def parse_roll(dice_string):
 			except RuntimeError as e:
 				if "Bad dice format" in str(e):
 					logger.info("Bad dice format")
-					return "Use an NdM format for rolls please."
+					return {"message": "Use an NdM format for rolls please."}
 				elif "Numbers too big" in str(e):
 					logger.info("Numbers too big")
-					return "You ask for too much."
+					return {"message": "You ask for too much."}
 				else:
 					logger.exception(e)
-					return "I failed, for some reason I don't know."
+					return {"message": "I failed, for some reason I don't know."}
 
 	message = "".join(dice_array)
 
@@ -225,13 +229,13 @@ async def parse_roll(dice_string):
 		result = nsp.eval(message.replace(" ", ""))
 	except ParseException as e:
 		logger.info("Could not evaluate {0}".format(message))
-		return "Bad expression"
+		return {"message": "Bad expression"}
 	except RecursionError as e:
 		logger.info("Recursion limit reached.")
-		return "Sorry, there's too many operations needed to evaluate that"
+		return {"message": "Sorry, there's too many operations needed to evaluate that"}
 	except OverflowError as e:
 		logger.info("Overflow error")
-		return "Ahhhh! Sorry, the result was too big."
+		return {"message": "Ahhhh! Sorry, the result was too big."}
 
 	# Convert to integer, if possible
 	if not isinstance(result, complex):
@@ -247,8 +251,23 @@ async def parse_roll(dice_string):
 	# Discord puts a 2000 character limit on messages
 	if len(message) > 2000:
 		if len(str(result)) + 3 > 2000:
-			return "The result is too big to print."
+			return {"message": "The result is too big to print."}
 		else:
-			return " = {0}".format(result)
+			return {"message": " = {0}".format(result)}
 	else:
-		return message
+		return {"message": message}
+
+async def stats():
+	logger.debug("Rolling stats")
+	rolls = []
+	for r in range(4):
+		roll = crypto.randint(1, 8)
+		if roll <= 4:
+			roll -= 4
+		else:
+			roll -= 5
+		rolls.append(roll)
+
+	return "Stats: " + ", ".join(str(x) for x in rolls)
+
+	

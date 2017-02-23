@@ -11,7 +11,7 @@ async def cat():
 		if r.status == 200:
 			js = await r.json()
 			logger.debug("Cat picture: {0}".format(js["file"]))
-			return js["file"]
+			return {"message": js["file"]}
 		else:
 			logger.error("Can't find a cat. Status: {0}".format(r.status))
 			

@@ -10,8 +10,8 @@ async def find_card(searchKey):
 	
 	try:
 		searchKey = searchKey.replace(" ", "+")
-		url = "http://magiccards.info/query?q=%s&v=card&s=cname"
-		return url % searchKey
+		url = "http://magiccards.info/query?q={0}&v=card&s=cname"
+		return {"message": url.format(searchKey)}
 	except Exception as e:
 		logger.exception("Error: {0}".format(e))
 
@@ -22,19 +22,9 @@ async def mtg_find_card(searchKey):
 	try:
 		cards = Card.where(name=searchKey).all()
 		if len(cards) == 0:
-			return "Couldn't find a card with that name"
+			return {"message": "Couldn't find a card with that name"}
 		else:
-			perfectMatch = False
-			perfectCards = []
-			for card in cards:
-				if card.name.lower() == searchKey.lower():
-					perfectMatch = True
-					perfectCards.append(card)
-
-			if not perfectMatch:
-				return "Multiple matches found, did you mean {0}?".format(cards[0].name)
-			else:
-				return perfectCards[-1].image_url
+			return {"message": cards[-1].image_url}
 
 	except Exception as e:
 		logger.exception("Error: {0}".format(e))

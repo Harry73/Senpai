@@ -35,11 +35,11 @@ async def translate(text):
 						output += "Reading: {0}\n".format(japanese["reading"])
 					if english:
 						output += "English: {0}".format(", ".join(english))
-					return output
+					return {"message": output}
 				else:
-					return "No translations found"
+					return {"message": "No translations found"}
 		else:
-			return "Well give me something to translate!"
+			return {"message": "Well give me something to translate!"}
 	except Exception as e:
 		logger.exception(e)
 	

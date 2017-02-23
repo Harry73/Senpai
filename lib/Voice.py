@@ -174,7 +174,7 @@ class Music:
 	async def summon(self, message):
 		summoned_channel = message.author.voice_channel
 		if summoned_channel is None:
-			return "You are not in a voice channel."
+			return {"message": "You are not in a voice channel."}
 
 		logger.debug("Joining {0}".format(summoned_channel))
 		state = self.get_voice_state(message.server)
@@ -188,13 +188,13 @@ class Music:
 	async def play(self, message, song : str):
 		# Requester must be in a voice channel to use "/play" command
 		if message.author.voice_channel is None:
-			return "You are not in a voice channel."
+			return {"message": "You are not in a voice channel."}
 
 		logger.debug("Play: {0}".format(song))
 		
 		if not song:
 			await self._resume(message)
-			return
+			return {}
 
 		state = self.get_voice_state(message.server)
 
@@ -244,6 +244,10 @@ class Music:
 	# Plays a clip song. If something is playing, the request will be queued"
 	# Also automatically searches YouTube for the song
 	async def play_mp3(self, message, clip : str):
+		# Requester must be in a voice channel to use "/play" command
+		if message.author.voice_channel is None:
+			return {"message": "You are not in a voice channel."}
+
 		logger.debug("Play mp3: {0}".format(clip))
 	
 		state = self.get_voice_state(message.server)
@@ -258,8 +262,8 @@ class Music:
 				"sounds/{0}.mp3".format(clip),
 				after=lambda: state.toggle_next(None)
 			)
-			player.url = "Sound clip: {0}".format(clip)
-			player.title = "Sound clip: {0}".format(clip)
+			player.url = "Sound clip - {0}".format(clip)
+			player.title = "Sound clip - {0}".format(clip)
 		except Exception as e:
 			logger.exception(e)
 		else:
@@ -301,7 +305,7 @@ class Music:
 		else:
 			response = "No songs queued"
 
-		return response
+		return {"message": response}
 
 	# Return the currently playing song
 	async def np(self, message):
@@ -310,9 +314,9 @@ class Music:
 		state = self.get_voice_state(message.server)
 
 		if state.current:
-			return "Now playing: {0}".format(state.current.player.title)
+			return {"message": "Now playing: {0}".format(state.current.player.title)}
 		else:
-			return "Not playing any music right now..."
+			return {"message": "Not playing any music right now..."}
 
 	# Skip a song
 	async def skip(self, message):
@@ -320,7 +324,7 @@ class Music:
 		
 		state = self.get_voice_state(message.server)
 		if not state.is_playing():
-			return "Not playing any music right now..."
+			return {"message": "Not playing any music right now..."}
 
 		state.skip()
 

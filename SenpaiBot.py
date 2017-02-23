@@ -10,6 +10,7 @@ from threading import Thread
 from subprocess import Popen, PIPE
 
 from lib import MessageHandler
+from lib import Spyfall
 from lib import Voice
 
 sys.setrecursionlimit(5000)
@@ -31,7 +32,8 @@ class SenpaiBot(discord.Client):
 
 		self.init_ok = False
 		self.music_player = Voice.Music(self)
-		super().__init__()
+		self.spyfall_game = Spyfall.Spyfall(self)
+		super().__init__(shard_id=0, shard_count = 5)
 
 	# Startup task
 	async def on_ready(self):
@@ -44,12 +46,15 @@ class SenpaiBot(discord.Client):
 	# Look for discord messages and ask MessageHandler to deal with any
 	async def on_message(self, message):
 		response = await MessageHandler.handle_message(self, message)
-
+		
 		# If a command created a response, send response here
 		if response:
 			await self.wait_until_ready()
 			try:
-				await self.send_message(message.channel, response)
+				if "channel" in response:
+					await self.send_message(response["channel"], response["message"])
+				else:
+					await self.send_message(message.channel, response["message"])
 			except discord.errors.HTTPException as e:
 				logger.exception(e)
 
