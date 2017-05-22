@@ -1,5 +1,6 @@
 import logging
 import aiohttp
+from unidecode import unidecode
 from bs4 import BeautifulSoup as BS
 
 from lib import Names
@@ -41,10 +42,13 @@ async def chat(authorID, message):
 		response = soup.findAll("font", attrs={"color": "#000000"})
 
 		text = str(response[0].text).strip()
+		text = unidecode(text)	# Attempt to convert to ascii text
 		
-		text = text[text.find("Μitsuku:")+9:]
+		index = text.find("Mitsuku:") + 9
+		text = text[index:]
 		if "You:" in text:
-			text = text[:text.find("You:")]
+			index = text.find("You:")
+			text = text[:index]
 		
 		text = text.replace("Μitsuku", "Senpai")
 		text = text.replace("Mousebreaker", "Ian")
@@ -52,7 +56,7 @@ async def chat(authorID, message):
 		text = text.replace("mousebreaker", "ian")
 		text = text.strip()
 		
-		logger.debug("Reply: {0}".format(text))
+		#logger.debug("Reply: {0}".format(text))
 		return {"message": text}
 
 # Have the chatbot learn the nickname of the author
