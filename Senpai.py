@@ -6,7 +6,6 @@ import json
 import shutil
 import asyncio
 import logging
-from subprocess import Popen, PIPE
 from SenpaiBot import SenpaiBot
 
 stop = False

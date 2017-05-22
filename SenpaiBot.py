@@ -6,8 +6,6 @@ import json
 import discord
 import asyncio
 import logging
-from threading import Thread
-from subprocess import Popen, PIPE
 
 from lib import MessageHandler
 from lib import Spyfall
@@ -16,13 +14,6 @@ from lib import Voice
 sys.setrecursionlimit(5000)
 
 logger = logging.getLogger("Senpai")
-
-sources = [
-	"hentai",
-	"ecchi",
-	"sukebei",
-	"pantsu"
-]
 
 class SenpaiBot(discord.Client):
 	def __init__(self):

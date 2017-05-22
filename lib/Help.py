@@ -4,9 +4,9 @@ from collections import OrderedDict
 
 owner_help_text = """```Commands:
 /secrets
-/kraithan @<names>: message
 /profile <image_url>
 /name <new_name>
+/restart
 /sudoku
 ```"""
 

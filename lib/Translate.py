@@ -15,11 +15,12 @@ async def translate(text):
 			js = None
 			
 			# Fetch json from url
-			async with aiohttp.get(url) as r:
-				if r.status == 200:
-					js = await r.json()
-				else:
-					logger.error("Can't translate. Status: {0}".format(r.status))
+			async with aiohttp.ClientSession() as session:
+				async with session.get(url) as r:
+					if r.status == 200:
+						js = await r.json()
+					else:
+						logger.error("Can't translate. Status: {0}".format(r.status))
 			
 			# Get translations from resulting data structure
 			if js:

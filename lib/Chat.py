@@ -8,7 +8,7 @@ logger = logging.getLogger("Senpai")
 sessions = {}
 
 async def chat(authorID, message):
-	global session
+	global sessions
 	logger.debug("Chat message: {0}".format(message))
 	
 	if authorID in sessions:
