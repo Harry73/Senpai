@@ -96,7 +96,6 @@ class VoiceEntry:
 		else:
 			return "something I don't recognize?"
 
-
 # Contains the music queues of VoiceEntry's and manages the "player"
 class VoiceState:
 	def __init__(self, bot):
@@ -113,7 +112,7 @@ class VoiceState:
 			return False
 
 		player = self.current.player
-		return player.is_playing()
+		return not player.is_done()
 
 	@property
 	def player(self):
@@ -121,8 +120,7 @@ class VoiceState:
 
 	def skip(self):
 		if self.is_playing():
-			self.current.player.stop()
-			self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
+			self.player.stop()
 
 	def toggle_next(self, last_song_filename):
 		# Remove last song played
@@ -135,13 +133,11 @@ class VoiceState:
 	async def audio_player_task(self):
 		while True:
 			self.play_next_song.clear()
-			self.current = None
 			self.current = await self.songs.get()
 			self.songs_queue.popleft()
 			logger.debug("Now playing {0}".format(str(self.current)))
 			self.current.player.start()
 			await self.play_next_song.wait()
-
 
 # Class for voice related commands
 class Music:
@@ -285,7 +281,7 @@ class Music:
 	# Resumes the currently playing song, internal method
 	async def _resume(self, message):
 		state = self.get_voice_state(message.server)
-		if not state.is_playing():
+		if state.is_playing():
 			player = state.player
 			player.resume()
 			logger.debug("Resumed music")
@@ -338,9 +334,10 @@ class Music:
 		state = self.get_voice_state(server)
 
 		if state.is_playing():
+			player = state.player
+			player.stop()
 			state.songs = asyncio.Queue()
 			state.songs_queue = deque()
-			state.skip()
 			
 	# Stops the song, clears the queue, and leaves the channel
 	async def gtfo(self, message):
