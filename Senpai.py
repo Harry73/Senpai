@@ -1,59 +1,112 @@
 import os
-import gc
+import re
 import sys
 import time
 import json
-import shutil
 import asyncio
+import shutil
 import logging
-from SenpaiBot import SenpaiBot
+import discord
+from subprocess import Popen, PIPE
+from threading import Thread
 
-stop = False
+from lib import MessageHandler
+from lib import Voice
+from lib import Message
 
 # Set up logger
-logger = logging.getLogger("Senpai")
-logger.setLevel(logging.DEBUG)
+LOGGER = logging.getLogger("Senpai")
+LOGGER.setLevel(logging.DEBUG)
 ch = logging.FileHandler(os.path.join(os.getcwd(), "Senpai.log"), mode="w")
 ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+LOGGER.addHandler(ch)
+
+CAN_CLEANUP = True
+SPECIAL_CLEANUP_REGEX = re.compile("/(summon|play|skip|pause|stop|gtfo).*")
+
 
 # Begin!
 def main():
-	global stop
-
-	count = 1
+	cycle = 0
 	while True:
-		bot = None
-
-		# Delete old audio files
-		if os.path.isdir("audio_cache"):
-			shutil.rmtree("./audio_cache")
-
 		try:
-			logger.info("Loop #{0}".format(count))
-			bot = SenpaiBot()
-			bot.run()
-		except Exception as e:
-			logger.exception("Death: {0}".format(e))
-		except SystemExit:
+			# Delete old audio files
+			if os.path.isdir("audio_cache"):
+				shutil.rmtree("./audio_cache")
+
+			LOGGER.info("Beginning cycle {0}".format(cycle))
+			bot = discord.Client()
+
+			# Get discord creds
+			with open("Config.json", "r") as f:
+				bot.config = json.load(f)
+
+			bot.init_ok = False
+			bot.music_player = Voice.Music(bot)
+
+			async def cleanup(messages_to_delete):
+				if CAN_CLEANUP:
+					await asyncio.sleep(5)
+					for message_to_delete in messages_to_delete:
+						try:
+							await bot.delete_message(message_to_delete)
+						except discord.errors.Forbidden:
+								LOGGER.warning("Lacking permissions to complete cleanup")
+
+			async def sendMessage(message_to_send, original_message):
+				if message_to_send.message:
+					await bot.wait_until_ready()
+					return await bot.send_message(message_to_send.channel, message_to_send.message)
+
+			# Startup task
+			@bot.event
+			async def on_ready():
+				LOGGER.info("Logged in as:")
+				LOGGER.info(bot.user.name)
+				LOGGER.info(bot.user.id)
+				LOGGER.info("--------------")
+				bot.init_ok = True
+
+			# Look for discord messages and ask MessageHandler to deal with any
+			@bot.event
+			async def on_message(original_message):
+				messages_to_send = await MessageHandler.handleMessage(bot, original_message)
+
+				if messages_to_send:
+					print(messages_to_send)
+					messages_to_delete = []
+
+					for message_to_send in messages_to_send:
+						if not message_to_send:
+							LOGGER.warning("Blank message in response to '{0}'".format(original_message.content))
+							continue
+
+						message_to_send.setChannel(original_message.channel)
+						print(type(message_to_send))
+						print(message_to_send)
+						bot_response = await sendMessage(message_to_send, original_message)
+						if message_to_send.cleanup_self:
+							messages_to_delete.append(bot_response)
+
+					if message_to_send.cleanup_original:
+						messages_to_delete.append(original_message)
+					await cleanup(messages_to_delete)
+
+				elif SPECIAL_CLEANUP_REGEX.match(original_message.content):
+					await cleanup([original_message])
+
+			bot.run(bot.config["discord"]["email"], bot.config["discord"]["pass"])
+		except KeyboardInterrupt:
 			break
-		except:
-			logger.error("Now I just have no idea what killed me.")
-		finally:
-			if not bot or not bot.init_ok:
-				break
+		except Exception as e:
+			LOGGER.error("I died")
+			LOGGER.exception(e)
+			cycle += 1
 
-			asyncio.set_event_loop(asyncio.new_event_loop())
-			count += 1
-			time.sleep(30)
-
-	# Clean up in the event of total failure
-	gc.collect()
-	logger.warning("I have committed sudoku.")
 
 # Check python version for 3.5 or better
 if __name__ == "__main__":
 	if sys.version_info >= (3, 5):
 		main()
 	else:
-		raise Exception("Run with python 3.5")
+		raise Exception("Run with python 3.5 or greater")

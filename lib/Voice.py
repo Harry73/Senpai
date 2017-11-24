@@ -1,5 +1,4 @@
 import os
-import json
 import shutil
 import logging
 import discord
@@ -9,7 +8,9 @@ import youtube_dl
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
-logger = logging.getLogger("Senpai")
+from lib.Message import Message
+
+LOGGER = logging.getLogger("Senpai")
 
 # Lots of options used by Downloader class
 ytdl_format_options = {
@@ -32,8 +33,10 @@ ytdl_format_options = {
 if not discord.opus.is_loaded():
 	discord.opus.load_opus("opus")
 
+
 # Encapsulates a YoutubeDL object and makes it nicer
 class Downloader:
+
 	def __init__(self, download_folder=None):
 		self.thread_pool = ThreadPoolExecutor(max_workers=2)
 		self.unsafe_ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
@@ -82,8 +85,10 @@ class Downloader:
 	async def safe_extract_info(self, loop, *args, **kwargs):
 		return await loop.run_in_executor(self.thread_pool, functools.partial(self.safe_ytdl.extract_info, *args, **kwargs))
 
+
 # Encapsulates a "player" for a song or mp3
 class VoiceEntry:
+
 	def __init__(self, message, player):
 		self.requester = message.author
 		self.channel = message.channel
@@ -96,8 +101,10 @@ class VoiceEntry:
 		else:
 			return "something I don't recognize?"
 
+
 # Contains the music queues of VoiceEntry's and manages the "player"
 class VoiceState:
+
 	def __init__(self, bot):
 		self.current = None
 		self.voice = None
@@ -135,12 +142,14 @@ class VoiceState:
 			self.play_next_song.clear()
 			self.current = await self.songs.get()
 			self.songs_queue.popleft()
-			logger.debug("Now playing {0}".format(str(self.current)))
+			LOGGER.debug("Now playing {0}".format(str(self.current)))
 			self.current.player.start()
 			await self.play_next_song.wait()
 
+
 # Class for voice related commands
 class Music:
+
 	def __init__(self, bot):
 		self.bot = bot
 		self.downloader = None
@@ -172,9 +181,13 @@ class Music:
 	async def summon(self, message):
 		summoned_channel = message.author.voice_channel
 		if summoned_channel is None:
-			return {"message": "You are not in a voice channel."}
+			return Message(message="You are not in a voice channel")
 
-		logger.debug("Joining {0}".format(summoned_channel))
+		# Keep Senpai out of the DnD voice channel
+		if summoned_channel == "140507618132230145":
+			return Message(message="DnD voice channel is blacklisted")
+
+		LOGGER.debug("Joining {0}".format(summoned_channel))
 		state = self.get_voice_state(message.server)
 		if state.voice is None:
 			state.voice = await self.bot.join_voice_channel(summoned_channel)
@@ -186,10 +199,10 @@ class Music:
 	async def play(self, message, song : str):
 		# Requester must be in a voice channel to use "/play" command
 		if message.author.voice_channel is None:
-			return {"message": "You are not in a voice channel."}
+			return Message(message="You are not in a voice channel.")
 
-		logger.debug("Play: {0}".format(song))
-		
+		LOGGER.debug("Play: {0}".format(song))
+
 		if not song:
 			await self._resume(message)
 			return {}
@@ -209,13 +222,13 @@ class Music:
 			info = await self.downloader.extract_info(self.bot.loop, song, download=False)
 
 			if not info:
-				print("Failed to extract info")
+				LOGGER.warning("Failed to extract info")
 			else:
 				if "entries" in info:
 					info = info["entries"][0]
 
 				song_url = info["webpage_url"]
-				logger.debug("Song url: {0}".format(song_url))
+				LOGGER.debug("Song url: {0}".format(song_url))
 
 				result = await self.downloader.safe_extract_info(self.bot.loop, song_url, download=True)
 				if not result:
@@ -232,9 +245,8 @@ class Music:
 				player.url = song
 				player.title = result["title"]
 		except Exception as e:
-			logger.exception(e)
+			LOGGER.exception(e)
 		else:
-			player._volume = 0.5
 			entry = VoiceEntry(message, player)
 			await state.songs.put(entry)
 			state.songs_queue.append(entry)
@@ -244,10 +256,10 @@ class Music:
 	async def play_mp3(self, message, clip : str):
 		# Requester must be in a voice channel to use "/play" command
 		if message.author.voice_channel is None:
-			return {"message": "You are not in a voice channel."}
+			return Message(message="You are not in a voice channel.")
 
-		logger.debug("Play mp3: {0}".format(clip))
-	
+		LOGGER.debug("Play mp3: {0}".format(clip))
+
 		state = self.get_voice_state(message.server)
 
 		if state.voice is None:
@@ -263,7 +275,7 @@ class Music:
 			player.url = "Sound clip - {0}".format(clip)
 			player.title = "Sound clip - {0}".format(clip)
 		except Exception as e:
-			logger.exception(e)
+			LOGGER.exception(e)
 		else:
 			player.volume = 0.6
 			entry = VoiceEntry(message, player)
@@ -276,7 +288,7 @@ class Music:
 		if state.is_playing():
 			player = state.player
 			player.pause()
-			logger.debug("Paused music")
+			LOGGER.debug("Paused music")
 
 	# Resumes the currently playing song, internal method
 	async def _resume(self, message):
@@ -284,52 +296,52 @@ class Music:
 		if state.is_playing():
 			player = state.player
 			player.resume()
-			logger.debug("Resumed music")
+			LOGGER.debug("Resumed music")
 
 	# Return a list of song titles in the queue
 	async def queue(self, message):
-		logger.debug("Queue requested")
-		
+		LOGGER.debug("Queue requested")
+
 		state = self.get_voice_state(message.server)
 
 		if state.songs_queue:
-			list = []
+			song_list = []
 			for song in state.songs_queue:
 				if hasattr(song.player, "title"):
-					list.append(song.player.title)
+					song_list.append(song.player.title)
 
 			response = "Songs currently in the queue:\n"
-			response += "\n".join(list)
+			response += "\n".join(song_list)
 		else:
 			response = "No songs queued"
 
-		return {"message": response}
+		return Message(message=response)
 
 	# Return the currently playing song
 	async def np(self, message):
-		logger.debug("Now playing requested")
-	
+		LOGGER.debug("Now playing requested")
+
 		state = self.get_voice_state(message.server)
 
 		if state.current:
-			return {"message": "Now playing: {0}".format(state.current.player.title)}
+			return Message(message="Now playing: {0}".format(state.current.player.title))
 		else:
-			return {"message": "Not playing any music right now..."}
+			return Message(message="Not playing any music right now...")
 
 	# Skip a song
 	async def skip(self, message):
-		logger.debug("Skipping song")
-		
+		LOGGER.debug("Skipping song")
+
 		state = self.get_voice_state(message.server)
 		if not state.is_playing():
-			return {"message": "Not playing any music right now..."}
+			return Message(message="Not playing any music right now...")
 
 		state.skip()
 
 	# Stops the song and clears the queue
 	async def stop(self, message):
-		logger.debug("Stopping sound")
-		
+		LOGGER.debug("Stopping sound")
+
 		server = message.server
 		state = self.get_voice_state(server)
 
@@ -338,7 +350,7 @@ class Music:
 			player.stop()
 			state.songs = asyncio.Queue()
 			state.songs_queue = deque()
-			
+
 	# Stops the song, clears the queue, and leaves the channel
 	async def gtfo(self, message):
 		server = message.server
@@ -351,7 +363,7 @@ class Music:
 		try:
 			state.audio_player.cancel()
 			del self.voice_states[server.id]
-			logger.debug("Leaving voice channel")
+			LOGGER.debug("Leaving voice channel")
 			await state.voice.disconnect()
 
 			# Delete old audio files

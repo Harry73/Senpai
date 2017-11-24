@@ -2,46 +2,46 @@ import os
 import json
 import logging
 
-from lib import Chat
+from lib.Message import Message
 
-logger = logging.getLogger("Senpai")
+LOGGER = logging.getLogger("Senpai")
 
 # Say hi to the user, and use the nickname they've chosen
-async def hi(authorID):
-	if os.path.isfile("names.txt"):		
+async def hi(author_id):
+	print("hi")
+	if os.path.isfile("names.txt"):
+		print("yes")
 		with open("names.txt", "r") as f:
 			names = json.load(f)
-			
-		if authorID in names:
-			return {"message": "Hi {0}.".format(names[authorID])}
+
+		if author_id in names:
+			return Message(message="Hi {0}.".format(names[author_id]))
 		else:
-			return {"message": "Hi. I don't have a name for you, use /callme <name> to pick your name."}
+			return Message(message="Hi. I don't have a name for you, use /callme <name> to pick your name.")
 	else:
+		print("no")
 		with open("names.txt", "w") as f:
 			f.write("{}")
-		return {"message": "Hi. I don't have a name for you, use /callme <name> to pick your name."}
-	
+		return Message(message="Hi. I don't have a name for you, use /callme <name> to pick your name.")
+
+
 # Update "names.txt" with the new nickname
-async def callme(authorID, newName):
+async def callMe(author_id, new_name):
 	with open("names.txt", "r") as f:
 		names = json.load(f)
-		
-	names[authorID] = newName
-		
+
+	names[author_id] = new_name
+
 	with open("names.txt", "w") as f:
 		json.dump(names, f)
-		
-	# Update the chatbot part with the new name
-	await Chat.learnNewName(authorID)
-		
-	return {"message": "Got it {0}!".format(newName)}
-	
-def getName(authorID):
+
+	return Message(message="Got it {0}!".format(new_name))
+
+
+def getName(author_id):
 	if os.path.isfile("names.txt"):
 		with open("names.txt", "r") as f:
 			names = json.load(f)
-			
-		if authorID in names:
-			return names[authorID]
-	
-	return None
+
+		if author_id in names:
+			return names[author_id]

@@ -4,123 +4,109 @@ import math
 from random import SystemRandom
 import operator
 
-logger = logging.getLogger("Senpai")
+from lib.Message import Message
+
+LOGGER = logging.getLogger("Senpai")
 
 totalDice = 0
 crypto = SystemRandom()
 
-# Used to evalute an expression string
+
+# Used to evaluate an expression string
 class NumericStringParser(object):
-	'''
-	Most of this code comes from the fourFn.py pyparsing example
-	'''
-	def pushFirst(self, strg, loc, toks):
+
+	"""Most of this code comes from the fourFn.py pyparsing example"""
+	def push_first(self, strg, loc, toks):
 		self.exprStack.append(toks[0])
 
-	def pushUMinus(self, strg, loc, toks):
-		if toks and toks[0]=="-":
+	def push_uminus(self, strg, loc, toks):
+		if toks and toks[0] == "-":
 			self.exprStack.append("unary -")
 
 	def __init__(self):
 		"""
-		expop   :: '^'
-		multop  :: '*' | '/'
-		addop   :: '+' | '-'
+		expop	:: '^'
+		multop	:: '*' | '/'
+		addop	:: '+' | '-'
 		integer :: ['+' | '-'] '0'..'9'+
-		atom    :: PI | E | real | fn '(' expr ')' | '(' expr ')'
-		factor  :: atom [ expop factor ]*
-		term    :: factor [ multop factor ]*
-		expr    :: term [ addop term ]*
+		atom	:: PI | E | real | fn '(' expr ')' | '(' expr ')'
+		factor	:: atom [ expop factor ]*
+		term	:: factor [ multop factor ]*
+		expr	:: term [ addop term ]*
 		"""
+		self.exprStack = []
 		point = Literal(".")
-		e     = CaselessLiteral("E")
-		fnumber = Combine( Word("+-"+nums, nums ) +
-						   Optional(point + Optional(Word(nums))) +
-						   Optional(e + Word("+-"+nums, nums)))
-		ident = Word(alphas, alphas+nums+"_$")
-		plus  = Literal("+")
+		e = CaselessLiteral("E")
+		fnumber = Combine(Word("+-" + nums, nums) +
+						  Optional(point + Optional(Word(nums))) +
+						  Optional(e + Word("+-" + nums, nums)))
+		ident = Word(alphas, alphas + nums + "_$")
+		plus = Literal("+")
 		minus = Literal("-")
-		mult  = Literal("*")
-		div   = Literal("/")
-		lpar  = Literal("(").suppress()
-		rpar  = Literal(")").suppress()
-		addop  = plus | minus
+		mult = Literal("*")
+		div = Literal("/")
+		lpar = Literal("(").suppress()
+		rpar = Literal(")").suppress()
+		addop = plus | minus
 		multop = mult | div
 		expop = Literal("^")
-		pi    = CaselessLiteral("PI")
+		pi = CaselessLiteral("PI")
 		expr = Forward()
-		atom = ((Optional(oneOf("- +")) 
-				+ (pi|e|fnumber|ident+lpar+expr+rpar).setParseAction(self.pushFirst))
-				| Optional(oneOf("- +")) + Group(lpar+expr+rpar)
-			).setParseAction(self.pushUMinus)
-		# by defining exponentiation as "atom [ ^ factor ]..." instead of
-		# "atom [ ^ atom ]...", we get right-to-left exponents, instead of left-to-right
-		# that is, 2^3^2 = 2^(3^2), not (2^3)^2.
+		atom = ((Optional(oneOf("- +"))
+				+ (pi | e | fnumber | ident + lpar + expr + rpar).setParseAction(self.push_first))
+				| Optional(oneOf("- +")) + Group(lpar + expr + rpar)
+				).setParseAction(self.push_uminus)
 		factor = Forward()
-		factor << atom + ZeroOrMore((expop + factor).setParseAction(self.pushFirst))
-		term = factor + ZeroOrMore((multop + factor).setParseAction(self.pushFirst))
-		expr << term + ZeroOrMore((addop + term).setParseAction(self.pushFirst))
-		# addop_term = (addop + term).setParseAction(self.pushFirst)
-		# general_term = term + ZeroOrMore(addop_term) | OneOrMore(addop_term)
-		# expr <<  general_term
+		factor << atom + ZeroOrMore((expop + factor).setParseAction(self.push_first))
+		term = factor + ZeroOrMore((multop + factor).setParseAction(self.push_first))
+		expr << term + ZeroOrMore((addop + term).setParseAction(self.push_first))
 		self.bnf = expr
-		# map operator symbols to corresponding arithmetic operations
+		# Map operator symbols to corresponding arithmetic operations
 		epsilon = 1e-12
 		self.opn = {
-			"+" : operator.add,
-			"-" : operator.sub,
-			"*" : operator.mul,
-			"/" : operator.truediv,
-			"^" : operator.pow
+			"+": operator.add,
+			"-": operator.sub,
+			"*": operator.mul,
+			"/": operator.truediv,
+			"^": operator.pow
 		}
-		self.fn  = {
-			"sin" : math.sin,
-			"cos" : math.cos,
-			"tan" : math.tan,
-			"abs" : abs,
-			"trunc" : lambda a: int(a),
-			"round" : round,
-			"sgn" : lambda a: abs(a)>epsilon and cmp(a,0) or 0
+		self.fn = {
+			"sin": math.sin,
+			"cos": math.cos,
+			"tan": math.tan,
+			"abs": abs,
+			"trunc": lambda a: int(a),
+			"round": round,
+			"sgn": lambda a: abs(a) > epsilon and cmp(a,0) or 0
 		}
 
-	def evaluateStack(self, s ):
+	def evaluate_stack(self, s ):
 		op = s.pop()
 		if op == "unary -":
-			return -self.evaluateStack(s)
+			return -self.evaluate_stack(s)
 		if op in "+-*/^":
-			op2 = self.evaluateStack(s)
-			op1 = self.evaluateStack(s)
+			op2 = self.evaluate_stack(s)
+			op1 = self.evaluate_stack(s)
 			return self.opn[op](op1, op2)
 		elif op == "PI":
 			return math.pi # 3.1415926535
 		elif op == "E":
 			return math.e  # 2.718281828
 		elif op in self.fn:
-			return self.fn[op](self.evaluateStack(s))
+			return self.fn[op](self.evaluate_stack(s))
 		elif op[0].isalpha():
 			return 0
 		else:
 			return float(op)
-			
-	def eval(self,num_string,parseAll=True):
-		self.exprStack=[]
-		results=self.bnf.parseString(num_string,parseAll)
-		val=self.evaluateStack(self.exprStack[:])
+
+	def eval(self, num_string, parse_all=True):
+		self.bnf.parseString(num_string, parse_all)
+		val = self.evaluate_stack(self.exprStack[:])
 		return val
 
-# Check if a string represents an int
-def isInt(num_str):
-	try:
-		num = int(num_str)
-		if num < 0:
-			return False
-		else:
-			return True
-	except:
-		return False
 
 # Split a string by sep and keep sep as an element in the result
-def splitstring(string, sep):
+def splitString(string, sep):
 	array = string.split(sep)
 	new_array = []
 	for index, item in enumerate(array):
@@ -130,11 +116,12 @@ def splitstring(string, sep):
 
 	return new_array
 
-# Split elements in an array using splitstring
-def splitarray(array, sep):
+
+# Split elements in an array using splitString
+def splitArray(array, sep):
 	for index, item in enumerate(array):
 		if sep in item and sep != item:
-			temp_array = splitstring(item, sep)
+			temp_array = splitString(item, sep)
 			del array[index]
 			temp_array.reverse()
 			for temp in temp_array:
@@ -142,8 +129,9 @@ def splitarray(array, sep):
 
 	return array
 
+
 # Generate random numbers for each die requested
-def roll_dice(dice):
+def rollDice(dice):
 	global totalDice
 
 	try:
@@ -178,64 +166,64 @@ def roll_dice(dice):
 		else:
 			raise RuntimeError("Bad dice format")
 
+
 # Figure out what a roll means and evaluate any expressions
-async def parse_roll(dice_string):
+async def parseRoll(dice_string):
 	if dice_string == "stats":
 		response = await stats()
-		return {"message": response}
-	
-	logger.debug("Rolling: {0}".format(dice_string))
+		return Message(message=response)
+
+	LOGGER.debug("Rolling: {0}".format(dice_string))
 
 	global totalDice
 	totalDice = 0
 
 	dice_string = dice_string.replace(" ", "")
-	logger.debug("Rolling %s", dice_string)
 	try:
-		dice_array = splitstring(dice_string, "+")
-		dice_array = splitarray(dice_array, "-")
-		dice_array = splitarray(dice_array, "*")
-		dice_array = splitarray(dice_array, "/")
-		dice_array = splitarray(dice_array, "^")
-		dice_array = splitarray(dice_array, "(")
-		dice_array = splitarray(dice_array, ")")
+		dice_array = splitString(dice_string, "+")
+		dice_array = splitArray(dice_array, "-")
+		dice_array = splitArray(dice_array, "*")
+		dice_array = splitArray(dice_array, "/")
+		dice_array = splitArray(dice_array, "^")
+		dice_array = splitArray(dice_array, "(")
+		dice_array = splitArray(dice_array, ")")
 	except Exception as e:
-		logger.exception(e)
-		return {"message": "I can't cope with whatever the hell you just tried to give me."}
+		LOGGER.exception(e)
+		return Message(message="I can't cope with whatever the hell you just tried to give me.")
 
 	# Roll for an NdM parts and substitute in the result in parenthesis
 	for index, item in enumerate(dice_array):
 		if "d" in item:
 			try:
-				string_result = roll_dice(item)
+				string_result = rollDice(item)
 				del dice_array[index]
 				dice_array.insert(index, "({0})".format(string_result))
 			except RuntimeError as e:
 				if "Bad dice format" in str(e):
-					logger.info("Bad dice format")
-					return {"message": "Use an NdM format for rolls please."}
+					LOGGER.info("Bad dice format")
+					return Message(message="Use an NdM format for rolls please.")
 				elif "Numbers too big" in str(e):
-					logger.info("Numbers too big")
-					return {"message": "You ask for too much."}
+					LOGGER.info("Numbers too big")
+					return Message(message="You ask for too much.")
 				else:
-					logger.exception(e)
-					return {"message": "I failed, for some reason I don't know."}
+					LOGGER.exception(e)
+					return Message(message="I failed, for some reason I don't know.")
 
-	message = "".join(dice_array)
+	result_string = "".join(dice_array)
 
 	# Attempt to evaluate the expression
 	nsp = NumericStringParser()
 	try:
-		result = nsp.eval(message.replace(" ", ""))
-	except ParseException as e:
-		logger.info("Could not evaluate {0}".format(message))
-		return {"message": "Bad expression"}
-	except RecursionError as e:
-		logger.info("Recursion limit reached.")
-		return {"message": "Sorry, there's too many operations needed to evaluate that"}
-	except OverflowError as e:
-		logger.info("Overflow error")
-		return {"message": "Ahhhh! Sorry, the result was too big."}
+		result = nsp.eval(result_string.replace(" ", ""))
+	except ParseException:
+		LOGGER.info("Could not evaluate {0}".format(result_string))
+		return Message(message="Bad expression")
+	except RecursionError:
+		LOGGER.info("Recursion limit reached.")
+		return Message(message="Sorry, there's too many operations needed to evaluate that")
+	except OverflowError:
+		LOGGER.info("Overflow error")
+		return Message(message="Ahhhh! Sorry, the result was too big.")
 
 	# Convert to integer, if possible
 	if not isinstance(result, complex):
@@ -243,31 +231,39 @@ async def parse_roll(dice_string):
 			result = int(result)
 		else:
 			result = round(result, 4)
-	message += "\n\t = {0}".format(result)
+	result_string += "\n\t = {0}".format(result)
 
 	# Tell discord message to ignore * use for italics
-	message.replace("*", "\*")
+	result_string.replace("*", "\*")
 
 	# Discord puts a 2000 character limit on messages
-	if len(message) > 2000:
-		if len(str(result)) + 3 > 2000:
-			return {"message": "The result is too big to print."}
-		else:
-			return {"message": " = {0}".format(result)}
+	if len(result_string) > 2000:
+		return Message(message="The result is too big to print.")
 	else:
-		return {"message": message}
+		return Message(message=result_string, cleanup_original=False, cleanup_self=False)
+
 
 async def stats():
-	logger.debug("Rolling stats")
-	rolls = []
-	for r in range(4):
-		roll = crypto.randint(1, 8)
-		if roll <= 4:
-			roll -= 4
-		else:
-			roll -= 5
-		rolls.append(roll)
+	LOGGER.debug("Rolling stats")
+	rounds = []
+	for i in range(6):
+		round = []
+		for r in range(4):
+			roll = crypto.randint(1, 6)
+			round.append(roll)
+		rounds.append(round)
 
-	return "Stats: " + ", ".join(str(x) for x in rolls)
+	string = ""
+	for round in rounds:
+		min_index = round.index(min(round))
+		for index, value in enumerate(round):
+			if index == min_index:
+				string = string + "~~" + str(value) + "~~ + "
+			else:
+				string = string + str(value) + " + "
+		string = string[:-3]
+		round.remove(min(round))
+		string += " = " + str(sum(round)) + "\n"
 
-	
+	return string
+
