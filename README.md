@@ -17,11 +17,9 @@ I currently run this on an actual user account, and use a "Config.json" file lik
 ```
 Changes may be needed to run this as a bot account.
 
-Start the bot with:  
-```python3.5 Senpai.py```
+Start the bot with: ```python3.5 Senpai.py```  
 
-Or run it under nohup with:
-```bash start.sh```
+Or run it under nohup with: ```bash start.sh```  
 
 When it's running, use the following help commands:
 ```
