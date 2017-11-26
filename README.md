@@ -1,7 +1,6 @@
 # Senpai
   
-A discord bot written in python  
-Expects python3.5 or better  
+A discord bot written in python. Expects python3.5 or better  
 
 I believe requirements.txt has all the pip packages needed, but it may be missing something. Install requirements with:  
 ```pip install -r requirements.txt```
@@ -18,7 +17,6 @@ I currently run this on an actual user account, and use a "Config.json" file lik
 Changes may be needed to run this as a bot account.
 
 Start the bot with: ```python3.5 Senpai.py```  
-
 Or run it under nohup with: ```bash start.sh```  
 
 When it's running, use the following help commands:
