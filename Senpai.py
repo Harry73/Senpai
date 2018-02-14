@@ -1,27 +1,26 @@
+import asyncio
+import discord
+import json
+import logging
 import os
 import re
-import sys
-import time
-import json
-import asyncio
 import shutil
-import logging
-import discord
 from subprocess import Popen, PIPE
-from threading import Thread
+import sys
 
 from lib import MessageHandler
 from lib import Voice
 
 # Set up logger
-LOGGER = logging.getLogger("Senpai")
+LOGGER = logging.getLogger('Senpai')
 LOGGER.setLevel(logging.DEBUG)
-ch = logging.FileHandler(os.path.join(os.getcwd(), "Senpai.log"), mode="w")
-ch.setLevel(logging.DEBUG)
+ch = logging.FileHandler(os.path.join(os.getcwd(), 'Senpai.log'), mode='w')
+ch.setFormatter(logging.Formatter('%(asctime)s %(message)s', '%Y-%m-%d %H:%M:%S'))
 LOGGER.addHandler(ch)
 
+CONFIG_FILE = os.path.join('json', 'config.json')
+TIMING_FILE = os.path.join('json', 'mark.json')
 CAN_CLEANUP = True
-SPECIAL_CLEANUP_REGEX = re.compile("/(summon|play|skip|pause|stop|gtfo).*")
 
 
 # Begin!
@@ -30,14 +29,14 @@ def main():
     while True:
         try:
             # Delete old audio files
-            if os.path.isdir("audio_cache"):
-                shutil.rmtree("./audio_cache")
+            if os.path.isdir('audio_cache'):
+                shutil.rmtree('./audio_cache')
 
-            LOGGER.info("Beginning cycle {0}".format(cycle))
+            LOGGER.info('Senpai.main: beginning cycle %s', cycle)
             bot = discord.Client()
 
             # Get discord creds
-            with open("Config.json", "r") as f:
+            with open(CONFIG_FILE, 'r') as f:
                 bot.config = json.load(f)
 
             bot.init_ok = False
@@ -47,23 +46,25 @@ def main():
                 if CAN_CLEANUP:
                     await asyncio.sleep(5)
                     for message_to_delete in messages_to_delete:
-                        try:
-                            await bot.delete_message(message_to_delete)
-                        except discord.errors.Forbidden:
-                                LOGGER.warning("Lacking permissions to complete cleanup")
+                        if message_to_delete.channel and 'Direct Message' not in str(message_to_delete.channel):
+                            try:
+                                await bot.delete_message(message_to_delete)
+                            except discord.errors.Forbidden:
+                                    LOGGER.debug('Senpai.main: lacking permissions to complete cleanup')
 
             async def send_bot_response(message_to_send):
                 if message_to_send.message:
                     await bot.wait_until_ready()
-                    return await bot.send_message(message_to_send.channel, message_to_send.message)
+                    if len(message_to_send.message) > 2000:
+                        return await bot.send_message(message_to_send.channel, 'The result is too big to print.')
+                    else:
+                        return await bot.send_message(message_to_send.channel, message_to_send.message)
 
             # Startup task
             @bot.event
             async def on_ready():
-                LOGGER.info("Logged in as:")
-                LOGGER.info(bot.user.name)
-                LOGGER.info(bot.user.id)
-                LOGGER.info("--------------")
+                LOGGER.info('Senpai.main: logged in username=%s, id=%s', bot.user.name, bot.user.id)
+                LOGGER.info('--------------')
                 bot.init_ok = True
 
             # Look for discord messages and ask MessageHandler to deal with any
@@ -77,7 +78,7 @@ def main():
                     should_cleanup_original = False
                     for message_to_send in messages_to_send:
                         if not message_to_send:
-                            LOGGER.warning("Blank message in response to '{0}'".format(original_message.content))
+                            LOGGER.warning('Senpai.main: blank message in response to "%s"', original_message.content)
                             continue
 
                         message_to_send.set_channel(original_message.channel)
@@ -91,21 +92,21 @@ def main():
                         messages_to_delete.append(original_message)
                     await cleanup(messages_to_delete)
 
-                elif SPECIAL_CLEANUP_REGEX.match(original_message.content):
+                elif original_message.content.startswith('/'):
                     await cleanup([original_message])
 
-            bot.run(bot.config["discord"]["email"], bot.config["discord"]["pass"])
+            bot.run(bot.config['discord'])
         except KeyboardInterrupt:
             break
         except Exception as e:
-            LOGGER.error("I died")
+            LOGGER.error('Senpai.main: I died')
             LOGGER.exception(e)
             cycle += 1
 
 
 # Check python version for 3.5 or better
-if __name__ == "__main__":
+if __name__ == '__main__':
     if sys.version_info >= (3, 5):
         main()
     else:
-        raise Exception("Run with python 3.5 or greater")
+        raise Exception('Run with python 3.5 or greater')

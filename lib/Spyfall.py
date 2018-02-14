@@ -1,18 +1,21 @@
 import json
+import os
 import random
 import logging
 
 from lib.Message import Message
 
-LOGGER = logging.getLogger("Senpai")
+LOGGER = logging.getLogger('Senpai')
 game_players = None
-
+SPYFALL_FILE = os.path.join('json', 'spyfall.json')
 
 async def play_spyfall(author, mentions):
     global game_players
     bot_responses = []
 
-    with open("spyfall.json", "r") as f:
+    LOGGER.debug('Spyfall.play_spyfall: players %s %s', author, mentions)
+
+    with open(SPYFALL_FILE, 'r') as f:
         roles = json.load(f)
 
     game_players = mentions
@@ -28,7 +31,7 @@ async def play_spyfall(author, mentions):
     spy = random.choice(players)
     players.remove(spy)
     bot_responses.append(Message(
-        message="You are the spy!\nPotential Locations: \n\t{0}".format("\n\t".join(sorted(locations))),
+        message='You are the spy!\nPotential Locations: \n\t{0}'.format('\n\t'.join(sorted(locations))),
         channel=spy,
         cleanup_original=False,
         cleanup_self=False
@@ -38,21 +41,22 @@ async def play_spyfall(author, mentions):
     for player in players:
         role = random.choice(roles)
         bot_responses.append(Message(
-            message="You are not the spy.\nLocation: {0}\nYour Role: {1}".format(location, role),
+            message='You are not the spy.\nLocation: {0}\nYour Role: {1}'.format(location, role),
             channel=player,
             cleanup_original=False,
             cleanup_self=False
         ))
         roles.remove(role)
 
-    bot_responses.append(Message(message="Game started"))
+    bot_responses.append(Message(message='Game started'))
 
     return bot_responses
 
 
 async def play_spyfall_again():
+    LOGGER.debug('Spyfall.play_spyfall_again: request')
     if game_players:
         response = await play_spyfall(None, None)
         return response
     else:
-        return Message(message="No previous game found")
+        return Message(message='No previous game found')

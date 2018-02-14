@@ -1,6 +1,6 @@
 import logging
 
-LOGGER = logging.getLogger("Senpai")
+LOGGER = logging.getLogger('Senpai')
 
 
 class Message:
@@ -16,5 +16,8 @@ class Message:
             self.channel = new_channel
 
     def __str__(self):
-        return str(self.message) + " || " + str(self.channel)
+        return str(self.message) + ' || ' + str(self.channel)
+        
+    def __repr__(self):
+        return self.__str__()
 

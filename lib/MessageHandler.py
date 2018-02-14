@@ -7,6 +7,7 @@ from subprocess import call
 from lib.Message import Message
 from lib import IDs
 from lib import Dice
+from lib import Hentai
 from lib import Card
 from lib import Profile
 from lib import Pun
@@ -16,9 +17,9 @@ from lib import Translate
 from lib import Names
 from lib import Spyfall
 
-LOGGER = logging.getLogger("Senpai")
-MTG_REGEX = re.compile("\[(?P<card>.*?)\]")
+MTG_REGEX = re.compile('\[(?P<card>.*?)\]')
 
+LOGGER = logging.getLogger('Senpai')
 
 # Method to detect any commands and deal with them
 async def handle_message(client, original_message):
@@ -27,119 +28,146 @@ async def handle_message(client, original_message):
     if original_message.author.id == IDs.SENPAI_ID:
         return
 
+    if original_message.content.startswith('/'):
+        LOGGER.debug('MessageHandler.handle_message: channel %s, author %s, content %s',
+            original_message.channel,
+            original_message.author,
+            original_message.content
+        )
+
     # Owner commands
     if original_message.author.id == IDs.OWNER_ID:
-        if original_message.content.startswith("/secrets"):
+        if original_message.content.startswith('/secrets'):
             bot_response = await Help.secrets(original_message)
 
-        elif original_message.content.startswith("/profile"):
+        elif original_message.content.startswith('/profile'):
             await Profile.edit_avatar(client, image_url=original_message.content[8:].strip())
 
-        elif original_message.content.startswith("/name"):
-            await Profile.edit_username(client, new_username=original_message.content[5:].strip())
+        elif original_message.content.startswith('/daily'):
+            if os.name == 'nt':
+                call(['python', 'lib/Daily.py'])
+            else:
+                call(['python3.5', 'lib/Daily.py'])
 
-        # Stops the "forever" or "pm2" process that is used to run the bot, thus killing the bot on comman
-        elif original_message.content.startswith("/sudoku"):
+        # Stops the pm2 process that is used to run the bot, thus killing the bot on command
+        elif original_message.content.startswith('/sudoku'):
             await client.logout()
-            call(["pm2", "stop", "Senpai"])
+            call(['pm2', 'stop', 'Senpai'])
 
-        elif original_message.content.startswith("/restart"):
+        elif original_message.content.startswith('/restart'):
             await client.logout()
-            call(["pm2", "restart", "Senpai"])
+            call(['pm2', 'restart', 'Senpai'])
 
     # Search for regex matches
     matches_mtg = re.findall(MTG_REGEX, original_message.content)
 
     # Call appropriate method to handle command
-    if original_message.content.startswith("/senpai"):
+    if original_message.content.startswith('/senpai'):
         bot_response = await Help.get_help(original_message, original_message.content[8:].strip())
 
-    elif original_message.content.startswith("/mtg"):
+    elif original_message.content.startswith('/mtg'):
         bot_response = await Card.mtg_find_cards(original_message.channel.id, [original_message.content[5:].strip()])
 
     elif matches_mtg:
         bot_response = await Card.mtg_find_cards(original_message.channel.id, matches_mtg)
 
-    elif original_message.content.startswith("/card"):
+    elif original_message.content.startswith('/card'):
         bot_response = await Card.find_card(original_message.channel.id, original_message.content[6:].strip())
 
-    elif original_message.content.startswith("/roll"):
+    elif original_message.content.startswith('/roll'):
         bot_response = await Dice.parse_roll(original_message.content[6:].strip())
 
-    elif original_message.content.startswith("/r "):
+    elif original_message.content.startswith('/r '):
         bot_response = await Dice.parse_roll(original_message.content[3:].strip())
 
-    elif original_message.content == "/pun":
+    elif original_message.content == '/pun':
         bot_response = await Pun.pun()
 
-    elif original_message.content == "/cat":
+    elif original_message.content == '/cat':
         bot_response = await Cat.cat()
 
-    elif original_message.content.startswith("/translate"):
+    elif original_message.content.startswith('/translate'):
         bot_response = await Translate.translate(original_message.content[11:].strip())
 
-    elif original_message.content == "/hi":
+    elif original_message.content.startswith('/hentai'):
+        bot_response = await Hentai.random_hentai(
+            original_message.channel.id,
+            original_message.content[8:].strip(),
+            original_message.author.id
+        )
+
+    elif original_message.content.startswith('/danbooru'):
+        bot_response = await Hentai.random_danbooru(
+            original_message.channel.id,
+            original_message.content[10:].strip(),
+            original_message.author.id
+        )
+
+    elif original_message.content == '/hi':
         bot_response = await Names.hi(original_message.author.id)
 
-    elif original_message.content.startswith("/callme"):
+    elif original_message.content.startswith('/callme'):
         bot_response = await Names.call_me(original_message.author.id, original_message.content[8:].strip())
 
-    elif original_message.content == "/spyfall again":
+    elif original_message.content == '/spyfall again':
         bot_response = await Spyfall.play_spyfall_again()
 
-    elif original_message.content.startswith("/spyfall"):
+    elif original_message.content.startswith('/spyfall'):
         bot_response = await Spyfall.play_spyfall(original_message.author, original_message.mentions)
 
     # Voice commands
-    elif original_message.content == "/summon":
+    elif original_message.content == '/summon':
         bot_response = await client.music_player.summon(original_message)
 
-    elif original_message.content == "/gtfo":
+    elif original_message.content == '/gtfo':
         bot_response = await client.music_player.gtfo(original_message)
 
-    elif original_message.content.startswith("/play"):
+    elif original_message.content.startswith('/play'):
         bot_response = await client.music_player.play(original_message, original_message.content[6:].strip())
 
-    elif original_message.content == "/pause":
+    elif original_message.content == '/pause':
         bot_response = await client.music_player.pause(original_message)
 
-    elif original_message.content == "/queue":
+    elif original_message.content == '/queue':
         bot_response = await client.music_player.queue(original_message)
 
-    elif original_message.content == "/np":
+    elif original_message.content == '/np':
         bot_response = await client.music_player.np(original_message)
 
-    elif original_message.content == "/skip":
+    elif original_message.content == '/skip':
         bot_response = await client.music_player.skip(original_message)
 
-    elif original_message.content == "/stop":
+    elif original_message.content == '/stop':
         bot_response = await client.music_player.stop(original_message)
 
     # Commands that require the list of sound clips
-    elif original_message.content.startswith("/"):
+    elif original_message.content.startswith('/'):
         # Get list of available sound clips from directory
-        clips = os.listdir("sounds/")
-        clips = [clip[:-4] for clip in clips if os.path.isfile(os.path.join("sounds/", clip))]
+        clips = os.listdir('sounds/')
+        clips = [clip[:-4] for clip in clips if os.path.isfile(os.path.join('sounds/', clip))]
 
-        if original_message.content == "/sounds":
-            bot_message = "\n".join(sorted(["/" + clip for clip in clips]))
-            bot_response = Message(message=bot_message)
+        if original_message.content == '/sounds':
+            bot_message = '\n'.join(sorted(['/' + clip for clip in clips]))
+            bot_response = Message(message=bot_message, channel=original_message.author, cleanup_self=False, cleanup_original=False)
+            if 'Direct Message' not in str(original_message.channel):
+                bot_response = [bot_response]
+                bot_response.append(Message(message='Sent you a DM.'))
 
-        elif original_message.content == "/count":
-            bot_message = str(len(clips)) + " sound clips"
+        elif original_message.content == '/count':
+            bot_message = str(len(clips)) + ' sound clips'
             bot_response = Message(message=bot_message)
 
         elif original_message.content[1:] in clips:
             bot_message = await client.music_player.play_mp3(original_message, original_message.content[1:].strip())
-            bot_response = Message(message=bot_message)
+            bot_response = Message(message=bot_message) if bot_message else None
 
-        elif original_message.content == "/shuffle":
+        elif original_message.content == '/shuffle':
             random.shuffle(clips)
             for clip in clips:
                 bot_response = await client.music_player.play_mp3(original_message, clip)
 
     if isinstance(bot_response, list):
-            return bot_response
+        return bot_response
     elif bot_response:
         return [bot_response]
     else:
