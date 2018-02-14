@@ -19,8 +19,8 @@ Or run it under nohup with: ```bash start.sh```
 
 When it's running, use the following help commands:
 ```
-    /senpai         -> Normal help function
-    /secrets        -> Owner-only commands
+/senpai         -> Normal help function
+/secrets        -> Owner-only commands
 ```
 Owner and bot IDs live in lib/IDs.py, along with some channel IDs. 
 

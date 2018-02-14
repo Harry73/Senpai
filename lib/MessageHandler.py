@@ -7,7 +7,6 @@ from subprocess import call
 from lib.Message import Message
 from lib import IDs
 from lib import Dice
-from lib import Hentai
 from lib import Card
 from lib import Profile
 from lib import Pun
@@ -88,20 +87,6 @@ async def handle_message(client, original_message):
 
     elif original_message.content.startswith('/translate'):
         bot_response = await Translate.translate(original_message.content[11:].strip())
-
-    elif original_message.content.startswith('/hentai'):
-        bot_response = await Hentai.random_hentai(
-            original_message.channel.id,
-            original_message.content[8:].strip(),
-            original_message.author.id
-        )
-
-    elif original_message.content.startswith('/danbooru'):
-        bot_response = await Hentai.random_danbooru(
-            original_message.channel.id,
-            original_message.content[10:].strip(),
-            original_message.author.id
-        )
 
     elif original_message.content == '/hi':
         bot_response = await Names.hi(original_message.author.id)
