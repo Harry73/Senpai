@@ -1,14 +1,16 @@
 import logging
+import math
+import operator
 from pyparsing import Literal, CaselessLiteral, Word, Combine, Group, Optional, ZeroOrMore, Forward, nums, alphas, \
     oneOf, ParseException
-import math
-from random import SystemRandom
-import operator
 
+from random import SystemRandom
+
+from lib.Command import register_command
 from lib.Message import Message
 
-LOGGER = logging.getLogger('Senpai')
 
+LOG = logging.getLogger('Senpai')
 totalDice = 0
 crypto = SystemRandom()
 
@@ -150,7 +152,7 @@ def roll_dice(dice):
             raise RuntimeError('Numbers too big')
 
         rolls = []
-        for r in range(number):
+        for i in range(number):
             rolls.append(crypto.randint(1, limit))
 
         if number == 1:
@@ -172,8 +174,6 @@ async def parse_roll(dice_string):
         response = await stats()
         return Message(message=response)
 
-    LOGGER.debug('Dice.parse_roll: request, %s', dice_string)
-
     global totalDice
     totalDice = 0
 
@@ -187,8 +187,8 @@ async def parse_roll(dice_string):
         dice_array = split_array(dice_array, '(')
         dice_array = split_array(dice_array, ')')
     except Exception as e:
-        LOGGER.exception(e)
-        return Message(message='Tell Ian whatever you just tried to do.')
+        LOG.exception(e)
+        return Message(message='Ask Ian about whatever you just tried to do')
 
     # Roll for an NdM parts and substitute in the result in parenthesis
     for index, item in enumerate(dice_array):
@@ -199,14 +199,14 @@ async def parse_roll(dice_string):
                 dice_array.insert(index, '({0})'.format(string_result))
             except RuntimeError as e:
                 if 'Bad dice format' in str(e):
-                    LOGGER.debug('Dice.parse_roll: bad dice format')
+                    LOG.debug('bad dice format')
                     return Message(message='Use an NdM format for rolls please.')
                 elif 'Numbers too big' in str(e):
-                    LOGGER.debug('Dice.parse_roll: numbers too big')
+                    LOG.debug('numbers too big')
                     return Message(message='You ask for too much.')
                 else:
-                    LOGGER.exception(e)
-                    return Message(message='Tell Ian whatever you just tried to do')
+                    LOG.exception(e)
+                    return Message(message='Ask Ian about whatever you just tried to do')
 
     result_string = ''.join(dice_array)
 
@@ -215,14 +215,14 @@ async def parse_roll(dice_string):
     try:
         result = nsp.eval(result_string.replace(' ', ''))
     except ParseException:
-        LOGGER.debug('Dice.parse_roll: could not evaluate %s', result_string)
+        LOG.debug('could not evaluate %s', result_string)
         return Message(message='Bad expression')
     except RecursionError:
-        LOGGER.debug('Dice.parse_roll: recursion limit reached.')
-        return Message(message='Sorry, there are too many operations needed to evaluate that')
+        LOG.debug('recursion limit reached.')
+        return Message(message='Too many operations are needed to evaluate that')
     except OverflowError:
-        LOGGER.debug('Dice.parse_roll: overflow error')
-        return Message(message='Ahhhh! Sorry, the result was too big.')
+        LOG.debug('parse_roll: overflow error')
+        return Message(message='Overflow error, the result was too big')
 
     # Convert to integer, if possible
     if not isinstance(result, complex):
@@ -236,32 +236,54 @@ async def parse_roll(dice_string):
     result_string.replace('*', '\*')
 
     # Discord puts a 2000 character limit on messages
-    LOGGER.debug('Dice.parse_roll: response, %s', result_string)
     return Message(message=result_string, cleanup_original=False, cleanup_self=False)
 
 
 async def stats():
-    LOGGER.debug('Dice.stats: request')
     rounds = []
     for i in range(6):
-        r = []
+        rnd = []
         for j in range(4):
-            roll = crypto.randint(1, 6)
-            r.append(roll)
-        rounds.append(r)
+            rnd.append(crypto.randint(1, 6))
+        rounds.append(rnd)
 
     string = ''
-    for r in rounds:
-        min_index = r.index(min(r))
-        for index, value in enumerate(r):
+    for rnd in rounds:
+        min_index = rnd.index(min(rnd))
+        for index, value in enumerate(rnd):
             if index == min_index:
                 string = string + '~~' + str(value) + '~~ + '
             else:
                 string = string + str(value) + ' + '
         string = string[:-3]
-        r.remove(min(r))
-        string += ' = ' + str(sum(r)) + '\n'
+        rnd.remove(min(rnd))
+        string += ' = ' + str(sum(rnd)) + '\n'
 
-    LOGGER.debug('Dice.stats: response, %s', string)
     return string
 
+
+@register_command(lambda m: m.content.startswith('/roll'))
+async def roll(bot, message):
+    """```
+    Roll20-like dice rolling. Any roll command is limited to 1000 total dice.
+
+    Usages:
+    * /roll NdM    -> roll an M-sided die N times and add the results
+    * /roll stats  -> will perform 6 rolls that can be used as stats for D&D 5e.
+    * /roll        -> can be shortened to '/r'
+    ```"""
+
+    return await parse_roll(message.content[6:].strip())
+
+
+@register_command(lambda m: m.content.startswith('/r '))
+async def r(bot, message):
+    """```
+    Roll20-like dice rolling. Any roll command is limited to 1000 total dice.
+
+    Usages:
+    * /r NdM    -> roll an M-sided die N times and add the results
+    * /r stats  -> will perform 6 rolls that can be used as stats for D&D 5e.
+    ```"""
+
+    return await parse_roll(message.content[3:].strip())

@@ -1,21 +1,28 @@
-import logging
 import aiohttp
+import logging
 
 from lib.Message import Message
+from lib.Command import register_command
 
-LOGGER = logging.getLogger('Senpai')
+
+LOG = logging.getLogger('Senpai')
 
 
-async def cat():
-    LOGGER.debug('Cat.cat: request')
+@register_command(lambda m: m.content == '/cat')
+async def cat(bot, message):
+    """```
+    Links a random picture of a cat.
 
-    url = 'http://random.cat/meow'
+    Usage:
+    * /cat
+    ```"""
+
+    url = 'http://aws.random.cat/meow'
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as r:
             if r.status == 200:
                 js = await r.json()
-                LOGGER.debug('Cat.cat: response, %s', js['file'])
                 return Message(message=js['file'])
             else:
-                LOGGER.error('Bad status: %s', r.status)
+                LOG.error('Bad status: %s', r.status)

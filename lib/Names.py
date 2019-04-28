@@ -1,14 +1,25 @@
-import os
 import json
-import logging
+import os
 
+from lib.Command import register_command
 from lib.Message import Message
 
-LOGGER = logging.getLogger('Senpai')
-NAMES_FILE = os.path.join('json', 'names.json')
+
+NAMES_FILE = os.path.join('bot_state', 'names.json')
+
 
 # Say hi to the user, and use the nickname they've chosen
-async def hi(author_id):
+@register_command(lambda m: m.content == '/hi')
+async def hi(bot, message):
+    """```
+    Senpai says hi to you by name, if she knows your name. Use /callme to set your name.
+
+    Usage:
+    * /hi
+    ```"""
+
+    author_id = message.author.id
+
     if os.path.isfile(NAMES_FILE):
         with open(NAMES_FILE, 'r') as f:
             names = json.load(f)
@@ -24,7 +35,17 @@ async def hi(author_id):
 
 
 # Update names.txt with the new nickname
-async def call_me(author_id, new_name):
+@register_command(lambda m: m.content.startswith('/callme'))
+async def callme(bot, message):
+    """```
+    In the future, Senpai will call you whatever name you provide. Use /hi to check your name.
+
+    /callme name
+    ```"""
+
+    author_id = message.author.id
+    new_name = message.content[8:].strip()
+
     with open(NAMES_FILE, 'r') as f:
         names = json.load(f)
 

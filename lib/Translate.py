@@ -1,14 +1,23 @@
 import logging
+
 import aiohttp
 
+from lib.Command import register_command
 from lib.Message import Message
 
-LOGGER = logging.getLogger('Senpai')
+LOG = logging.getLogger('Senpai')
 
 
-async def translate(text):
-    LOGGER.debug('Translate.translate: request, %s', text)
+@register_command(lambda m: m.content.startswith('/translate'))
+async def translate(bot, message):
+    """```
+    Use jisho.org to translate the given text.
 
+    Usage:
+    * /translate <text>
+    ```"""
+
+    text = message.content[11:].strip()
     url = 'http://jisho.org/api/v1/search/words?'
 
     try:
@@ -22,7 +31,7 @@ async def translate(text):
                     if r.status == 200:
                         js = await r.json()
                     else:
-                        LOGGER.error('Translate.translate: bad status, %s', r.status)
+                        LOG.error('bad status, %s', r.status)
 
             # Get translations from resulting data structure
             if js:
@@ -38,13 +47,11 @@ async def translate(text):
                         output += 'Reading: {0}\n'.format(japanese['reading'])
                     if english:
                         output += 'English: {0}'.format(', '.join(english))
-                    LOGGER.debug('Translate.translate: response, %s', output)
                     return Message(message=output)
                 else:
-                    LOGGER.debug('Translate.translate: no translation')
                     return Message(message='No translations found')
         else:
-            LOGGER.debug('Translate.translate: no input')
-            return Message(message='Well give me something to translate!')
+            return Message(message='Usage: /translate <text>')
+
     except Exception as e:
-        LOGGER.exception(e)
+        LOG.exception(e)

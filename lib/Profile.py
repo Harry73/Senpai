@@ -1,23 +1,31 @@
 import aiohttp
 import logging
 
-from lib import IDs
+from lib.Command import CommandType, register_command
 
-LOGGER = logging.getLogger('Senpai')
+
+LOG = logging.getLogger('Senpai')
 
 
 # Method to edit the bot avatar
-async def edit_avatar(client, image_url=None):
-    # Change bot's profile picture
+@register_command(lambda m: m.content.startswith('/profile'), command_type=CommandType.OWNER)
+async def profile(bot, message):
+    """```
+    Set Senpai's profile picture from a given url.
+
+    Usage:
+    * /profile image_url
+    ```"""
+    image_url = message.content[8:].strip()
+
     if image_url:
-        LOGGER.debug('Profile.edit_avatar: new avatar %s', image_url)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as r:
                     if r.status == 200:
                         new_image = await r.read()
-                        await client.edit_profile(avatar=new_image)
+                        await bot.edit_profile(avatar=new_image)
                     else:
-                        LOGGER.error('Profile.edit_avatar: bad status: %s', r.status)
+                        LOG.error('bad status: %s', r.status)
         except Exception as e:
-            LOGGER.exception(e)
+            LOG.exception(e)

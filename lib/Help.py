@@ -1,143 +1,83 @@
-import os
-import logging
-from collections import OrderedDict
-
+from lib import Command
+from lib.Command import CommandType, register_command
 from lib.Message import Message
 
-owner_help_text = """```Commands:
-/secrets
-/profile <image_url>
-/restart
-/sudoku
-```"""
 
-# Help
-regular_commands = OrderedDict()
-regular_commands['senpai'] = """```/senpai <command>
-Show information about the command specified.```"""
+def _get_help(request, author, channel, command_types, base_command):
+    # Generate list of all available commands
+    commands = {}
+    for command_type in command_types:
+        for command, help_text in Command.HELP_TEXT[command_type].items():
+            commands[command] = help_text
 
-regular_commands['mtg'] = """```/mtg <card name>
-Searches for a MTG card using the standard API```"""
-
-regular_commands['card'] = """```/card <card name>
-Provides link to search from magiccards.info```"""
-
-regular_commands['roll'] = """```/roll NdM
-Roll20-like dice rolling. Any roll command is limited to 1000 total dice.
-'/roll stats' will perform 6 rolls that can be used as stats for D&D 5e.
-'/roll' can be shortened to '/r'```"""
-
-regular_commands['pun'] = """```/pun
-Say a pun.```"""
-
-regular_commands['cat'] = """```/cat
-Links a picture to a random cat```"""
-
-regular_commands['translate'] = """```/translate <text>
-Use jisho.org to translate <text>```"""
-
-regular_commands['spyfall'] = """```/spyfall @players
-Starts a clone of the game Spyfall. Players will be PM'd their roles."""
-
-regular_commands['hi'] = """```/hi
-Senpai says hi to you.```"""
-
-regular_commands['callme'] = """```/callme <name>
-In the future, Senpai will call you <name>.```"""
-
-
-voice_commands = OrderedDict()
-voice_commands['summon'] = """```/summon
-Bring Senpai to your current voice channel```"""
-
-voice_commands['play'] = """```Brings Senpai to your current voice channel if she's not already in it.
-/play <youtube link>            -> Plays the linked song
-/play <youtube search words>    -> Plays the first YT result
-/play <soundcloud link>         -> Plays the linked song
-/play                           -> Resumes paused music```"""
-
-voice_commands['pause'] = """```/pause
-Pauses the current song. Use /play to resume.```"""
-
-voice_commands['queue'] = """```/queue
-Lists the songs currently in the queue.```"""
-
-voice_commands['np'] = """```/np
-Prints the currently playing song.```"""
-
-voice_commands['skip'] = """```/skip
-Skips the currently playing song.```"""
-
-voice_commands['stop'] = """```/stop
-Stops playing any music and clear the current queue of songs.```"""
-
-voice_commands['shuffle'] = """```/shuffle
-Plays all the sounds clips in a random order. Please play nice.```"""
-
-voice_commands['gtfo'] = """```/gtfo
-Senpai will leave her current voice channel and clear the current queue of songs.```"""
-
-voice_commands['sounds'] = """```/sounds
-PMs you a list of commands for sound clips that Senpai can play.```"""
-
-LOGGER = logging.getLogger('Senpai')
-
-
-async def get_help(message, request):
-    LOGGER.debug('Help.get_help: request, %s', request)
-
-    # Compile default help text
-    regular_commands_list = ['/{0}'.format(command) for command in list(regular_commands.keys())]
-    voice_commands_list = ['/{0}'.format(command) for command in list(voice_commands.keys())]
-
-    help_text = '```Use /senpai <command> for more information\n\n'
-    help_text += 'General: \n' + ', '.join(regular_commands_list) + '\n\n'
-    help_text += 'Voice: \n' + ', '.join(voice_commands_list) + '```'
-
-    author = message.author
-    channel = message.channel
+    responses = []
 
     if not request:
-        bot_response = Message(
+        # Compile default help text
+        help_text = '```'
+        help_text += 'Use /{0} <command> for more information about a command.\n\n'.format(base_command)
+        for command_type in command_types:
+            # Skip reporting the clips, they make the help text too large
+            if command_type == CommandType.CLIP:
+                continue
+
+            help_text += '{0} commands: \n{1}\n\n'.format(
+                command_type.name.capitalize(),
+                ', '.join(sorted(['/{0}'.format(command) for command in Command.HELP_TEXT[command_type]]))
+            )
+        help_text += '```'
+
+        responses.append(Message(
             message=help_text,
             channel=author,
             cleanup_original=False,
             cleanup_self=False
-        )
+        ))
+
     else:
-        if request in regular_commands:
-            bot_response = Message(
-                message=regular_commands[request],
-                channel=author,
-                cleanup_original=False,
-                cleanup_self=False
-            )
-        elif request in voice_commands:
-            bot_response = Message(
-                message=voice_commands[request],
-                channel=author,
-                cleanup_original=False,
-                cleanup_self=False
-            )
-        else:
-            bot_response = Message(
+        if request not in commands:
+            return Message(
                 message='No {0} command'.format(request),
                 channel=author,
                 cleanup_original=False,
                 cleanup_self=False
             )
 
-    if 'Direct Message' in str(channel):
-        LOGGER.debug('Help.get_help: response, %s', bot_response)
-        return bot_response
-    else:
-        responses = [bot_response]
-        bot_response = Message(message='Sent you a DM.')
-        responses.append(bot_response)
-        LOGGER.debug('Help.get_help: responses, %s', responses)
-        return responses
+        responses.append(Message(
+            message=commands[request],
+            channel=author,
+            cleanup_original=False,
+            cleanup_self=False
+        ))
+
+    if 'Direct Message' not in str(channel) and responses:
+        responses.append(Message(message='Sent you a DM.'))
+
+    return responses
 
 
-async def secrets(message):
-    return Message(message=owner_help_text, channel=message.channel)
+@register_command(lambda m: m.content.startswith('/senpai'))
+async def senpai(bot, message):
+    """```
+    Senpai's help function. Responses will be PM'd.
 
+    Usages:
+    * /senpai            -> gives a list of available commands
+    * /senpai command    -> gives information about a specific command
+    ```"""
+
+    return _get_help(message.content[8:].strip(), message.author, message.channel,
+                     [CommandType.GENERAL, CommandType.VOICE, CommandType.CLIP], 'senpai')
+
+
+@register_command(lambda m: m.content.startswith('/secrets'), command_type=CommandType.OWNER)
+async def secrets(bot, message):
+    """```
+    List Senpai's owner-only commands. Responses will be PM'd.
+
+    Usage:
+    * /secrets
+    ```"""
+
+    return _get_help(message.content[9:].strip(), message.author, message.channel,
+                     [CommandType.OWNER], 'secrets')

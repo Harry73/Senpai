@@ -1,159 +1,83 @@
+import json
+import logging
 import os
 import re
-import random
-import logging
-from subprocess import call
 
-from lib.Message import Message
-from lib import IDs
-from lib import Dice
+from datetime import datetime
+
+# These all need to be imported so that the command list is built
 from lib import Card
+from lib import Cat
+from lib import Command
+from lib import Dice
+from lib import IDs
+from lib import Help
+from lib import Names
 from lib import Profile
 from lib import Pun
-from lib import Cat
-from lib import Help
-from lib import Translate
-from lib import Names
+from lib import Purge
+from lib import React
+from lib import Secrets
 from lib import Spyfall
+from lib import Translate
+from lib import Voice
 
+LOG = logging.getLogger('Senpai')
 MTG_REGEX = re.compile('\[(?P<card>.*?)\]')
+HS_REGEX = re.compile('\{(?P<card>.*?)\}')
+COMMAND_CONDITIONS = Command.get_command_conditions()
 
-LOGGER = logging.getLogger('Senpai')
 
-# Method to detect any commands and deal with them
-async def handle_message(client, original_message):
-    bot_response = None
+def update_trackers(bot, original_message):
+    for channel, file in bot.tracking.items():
+        if original_message.channel.id == channel:
+            if os.path.exists(file):
+                with open(file, 'r') as f:
+                    history = json.load(f)
+            else:
+                history = {}
+
+            history[original_message.author.id] = str(datetime.utcnow())
+
+            with open(file, 'w') as f:
+                json.dump(history, f)
+
+
+async def handle_message(bot, original_message):
+    response = None
 
     if original_message.author.id == IDs.SENPAI_ID:
         return
 
-    if original_message.content.startswith('/'):
-        LOGGER.debug('MessageHandler.handle_message: channel %s, author %s, content %s',
-            original_message.channel,
-            original_message.author,
-            original_message.content
-        )
+    # Update tracking files
+    update_trackers(bot, original_message)
 
-    # Owner commands
-    if original_message.author.id == IDs.OWNER_ID:
-        if original_message.content.startswith('/secrets'):
-            bot_response = await Help.secrets(original_message)
-
-        elif original_message.content.startswith('/profile'):
-            await Profile.edit_avatar(client, image_url=original_message.content[8:].strip())
-
-        elif original_message.content.startswith('/daily'):
-            if os.name == 'nt':
-                call(['python', 'lib/Daily.py'])
-            else:
-                call(['python3.5', 'lib/Daily.py'])
-
-        # Stops the pm2 process that is used to run the bot, thus killing the bot on command
-        elif original_message.content.startswith('/sudoku'):
-            await client.logout()
-            call(['pm2', 'stop', 'Senpai'])
-
-        elif original_message.content.startswith('/restart'):
-            await client.logout()
-            call(['pm2', 'restart', 'Senpai'])
+    # Check functions auto-collected by @register_command
+    for function, condition in COMMAND_CONDITIONS.items():
+        if condition(original_message):
+            LOG.debug('request, channel %s, author %s, content %s', original_message.channel,
+                      original_message.author, original_message.content)
+            response = await function(bot, original_message)
+            break
 
     # Search for regex matches
     matches_mtg = re.findall(MTG_REGEX, original_message.content)
+    matches_hs = re.findall(HS_REGEX, original_message.content)
+    if matches_mtg:
+        LOG.debug('regex request, channel %s, author %s, content %s', original_message.channel,
+                  original_message.author, original_message.content)
+        response = await Card.mtg(bot, original_message, override_search_keys=matches_mtg)
+    elif matches_hs:
+        LOG.debug('regex request, channel %s, author %s, content %s', original_message.channel,
+                  original_message.author, original_message.content)
+        response = await Card.hs(bot, original_message, override_search_keys=matches_hs)
 
-    # Call appropriate method to handle command
-    if original_message.content.startswith('/senpai'):
-        bot_response = await Help.get_help(original_message, original_message.content[8:].strip())
+    if response:
+        LOG.debug('responses, %s', response)
 
-    elif original_message.content.startswith('/mtg'):
-        bot_response = await Card.mtg_find_cards(original_message.channel.id, [original_message.content[5:].strip()])
-
-    elif matches_mtg:
-        bot_response = await Card.mtg_find_cards(original_message.channel.id, matches_mtg)
-
-    elif original_message.content.startswith('/card'):
-        bot_response = await Card.find_card(original_message.channel.id, original_message.content[6:].strip())
-
-    elif original_message.content.startswith('/roll'):
-        bot_response = await Dice.parse_roll(original_message.content[6:].strip())
-
-    elif original_message.content.startswith('/r '):
-        bot_response = await Dice.parse_roll(original_message.content[3:].strip())
-
-    elif original_message.content == '/pun':
-        bot_response = await Pun.pun()
-
-    elif original_message.content == '/cat':
-        bot_response = await Cat.cat()
-
-    elif original_message.content.startswith('/translate'):
-        bot_response = await Translate.translate(original_message.content[11:].strip())
-
-    elif original_message.content == '/hi':
-        bot_response = await Names.hi(original_message.author.id)
-
-    elif original_message.content.startswith('/callme'):
-        bot_response = await Names.call_me(original_message.author.id, original_message.content[8:].strip())
-
-    elif original_message.content == '/spyfall again':
-        bot_response = await Spyfall.play_spyfall_again()
-
-    elif original_message.content.startswith('/spyfall'):
-        bot_response = await Spyfall.play_spyfall(original_message.author, original_message.mentions)
-
-    # Voice commands
-    elif original_message.content == '/summon':
-        bot_response = await client.music_player.summon(original_message)
-
-    elif original_message.content == '/gtfo':
-        bot_response = await client.music_player.gtfo(original_message)
-
-    elif original_message.content.startswith('/play'):
-        bot_response = await client.music_player.play(original_message, original_message.content[6:].strip())
-
-    elif original_message.content == '/pause':
-        bot_response = await client.music_player.pause(original_message)
-
-    elif original_message.content == '/queue':
-        bot_response = await client.music_player.queue(original_message)
-
-    elif original_message.content == '/np':
-        bot_response = await client.music_player.np(original_message)
-
-    elif original_message.content == '/skip':
-        bot_response = await client.music_player.skip(original_message)
-
-    elif original_message.content == '/stop':
-        bot_response = await client.music_player.stop(original_message)
-
-    # Commands that require the list of sound clips
-    elif original_message.content.startswith('/'):
-        # Get list of available sound clips from directory
-        clips = os.listdir('sounds/')
-        clips = [clip[:-4] for clip in clips if os.path.isfile(os.path.join('sounds/', clip))]
-
-        if original_message.content == '/sounds':
-            bot_message = '\n'.join(sorted(['/' + clip for clip in clips]))
-            bot_response = Message(message=bot_message, channel=original_message.author, cleanup_self=False, cleanup_original=False)
-            if 'Direct Message' not in str(original_message.channel):
-                bot_response = [bot_response]
-                bot_response.append(Message(message='Sent you a DM.'))
-
-        elif original_message.content == '/count':
-            bot_message = str(len(clips)) + ' sound clips'
-            bot_response = Message(message=bot_message)
-
-        elif original_message.content[1:] in clips:
-            bot_message = await client.music_player.play_mp3(original_message, original_message.content[1:].strip())
-            bot_response = Message(message=bot_message) if bot_message else None
-
-        elif original_message.content == '/shuffle':
-            random.shuffle(clips)
-            for clip in clips:
-                bot_response = await client.music_player.play_mp3(original_message, clip)
-
-    if isinstance(bot_response, list):
-        return bot_response
-    elif bot_response:
-        return [bot_response]
+    if isinstance(response, list):
+        return response
+    elif response:
+        return [response]
     else:
         return None

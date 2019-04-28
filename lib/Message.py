@@ -1,9 +1,10 @@
-import logging
-
-LOGGER = logging.getLogger('Senpai')
-
-
 class Message:
+    """
+    Wraps a message that Senpai should respond with, including parameters for:
+        * Which channel to use if the reply should go to a channel other than the one the message came from
+        * Whether or not the original message should be cleaned up
+        * Whether or not Senpai's response should be cleaned up
+    """
 
     def __init__(self, message=None, channel=None, cleanup_original=True, cleanup_self=True):
         self.message = message
@@ -20,4 +21,3 @@ class Message:
         
     def __repr__(self):
         return self.__str__()
-

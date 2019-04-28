@@ -1,0 +1,33 @@
+[
+    {
+        "name": "dnd_weekly_ping",
+        "handler": "dnd_ping",
+        "frequency": "weekly",
+        "time_window_start": {
+            "day": 6,
+            "hour": 13,
+            "minute": 0
+        },
+        "time_window_end": {
+            "day": 6,
+            "hour": 13,
+            "minute": 5
+        }
+    },
+
+    {
+        "name": "dnd_weekly_bother",
+        "handler": "dnd_bother",
+        "frequency": "weekly",
+        "time_window_start": {
+            "day": 0,
+            "hour": 13,
+            "minute": 5
+        },
+        "time_window_end": {
+            "day": 0,
+            "hour": 13,
+            "minute": 10
+        }
+    }
+]
