@@ -33,5 +33,7 @@ The bot will clean up after itself if you give it the "Manage messages" permissi
 
 Scheduled events are defined in `json/events.json`, and have corresponding event handlers in `lib/Events.py`.
 
+See `lib/Command.py` for guidance on creating new commands for the bot, and/or use other commands as a model.
+
 The GitHub version of Senpai is slightly modified, so I won't guarantee that this works out of the box, 
 but it should mostly be functional. 
