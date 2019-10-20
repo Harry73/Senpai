@@ -1,6 +1,6 @@
 from enum import Enum
 
-from lib import IDs
+from lib import Ids
 
 
 class CommandType(Enum):
@@ -22,7 +22,7 @@ def register_command(condition, command_type=CommandType.GENERAL, override_name=
 
     # Check if a message is from the owner and check the original condition
     def owner_condition(message):
-        return message.author.id == IDs.OWNER_ID and condition(message)
+        return message.author.id == Ids.OWNER_ID and condition(message)
 
     def wrapper(function):
         command_condition = owner_condition if is_owner_only(command_type) else condition

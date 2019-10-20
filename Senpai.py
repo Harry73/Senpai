@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import asyncio
 import discord
 import json
@@ -8,7 +10,7 @@ import sys
 import threading
 
 from lib import Events
-from lib import IDs
+from lib import Ids
 from lib import MessageHandler
 from lib import Voice
 
@@ -20,11 +22,10 @@ if os.path.exists('Senpai.log'):
 # Set up logger
 LOG = logging.getLogger('Senpai')
 LOG.setLevel(logging.DEBUG)
-ch = logging.FileHandler(os.path.join(os.getcwd(), 'Senpai.log'), mode='w')
-ch.setFormatter(logging.Formatter('%(asctime)s - %(module)s: %(message)s', '%Y-%m-%d %H:%M:%S'))
-LOG.addHandler(ch)
+handler = logging.FileHandler(os.path.join(os.getcwd(), 'Senpai.log'), mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s - %(module)s: %(message)s', '%Y-%m-%d %H:%M:%S'))
+LOG.addHandler(handler)
 
-AUDIO_CACHE_DIR = 'audio_cache'
 REQUIRED_DIRS = ['event_state', 'bot_state']
 CONFIG_FILE = os.path.join('json', 'config.json')
 DND_TRACKING_FILE = os.path.join('event_state', 'dnd_latest.json')
@@ -44,8 +45,8 @@ def main():
         LOG.info('startup')
 
         # Delete old audio files
-        if os.path.isdir(AUDIO_CACHE_DIR):
-            shutil.rmtree('./{0}'.format(AUDIO_CACHE_DIR))
+        if os.path.isdir(Voice.AUDIO_CACHE_DIR):
+            shutil.rmtree('./{0}'.format(Voice.AUDIO_CACHE_DIR))
 
         bot = discord.Client()
 
@@ -54,10 +55,8 @@ def main():
             bot.config = json.load(f)
 
         # Set up variables under "bot" that are used elsewhere in the implementation
-        bot.downloader = Voice.Downloader(download_folder=AUDIO_CACHE_DIR)
-        bot.voice_states = {}
         bot.tracking = {
-            IDs.NAMES_TO_CHANNELS['dnd']: DND_TRACKING_FILE,
+            Ids.NAMES_TO_CHANNELS['dnd']: DND_TRACKING_FILE,
         }
 
         # Startup task
@@ -77,7 +76,7 @@ def main():
                 for message_to_delete in messages_to_delete:
                     if message_to_delete.channel and 'Direct Message' not in str(message_to_delete.channel):
                         try:
-                            await bot.delete_message(message_to_delete)
+                            await message_to_delete.channel.delete_messages([message_to_delete])
                         except discord.errors.Forbidden:
                             LOG.debug('lacking permissions to complete cleanup')
                         except discord.errors.NotFound:
@@ -88,10 +87,9 @@ def main():
             if message_to_send.message:
                 await bot.wait_until_ready()
                 if len(message_to_send.message) > 2000:
-                    return await bot.send_message(message_to_send.channel,
-                                                  'My response was too big to send, ask Ian about this')
+                    return await message_to_send.channel.send('My response was too big to send, ask Ian about this')
                 else:
-                    return await bot.send_message(message_to_send.channel, message_to_send.message)
+                    return await message_to_send.channel.send(message_to_send.message)
 
         # Watch for discord messages and ask MessageHandler to deal with any
         @bot.event
@@ -124,13 +122,7 @@ def main():
         # Run the bot
         bot.run(bot.config['discord'])
 
-    except KeyboardInterrupt:
-        if bot:
-            bot.logout()
-
     except Exception as e:
-        if bot:
-            bot.logout()
         LOG.error('I died')
         LOG.exception(e)
 
@@ -139,7 +131,7 @@ def main():
 
 # Check python version for 3.5 or better
 if __name__ == '__main__':
-    if sys.version_info >= (3, 5):
-        main()
-    else:
+    if sys.version_info < (3, 6):
         raise Exception('Run with python 3.5 or greater')
+
+    main()

@@ -18,7 +18,7 @@ async def hi(bot, message):
     * /hi
     ```"""
 
-    author_id = message.author.id
+    author_id = str(message.author.id)
 
     if os.path.isfile(NAMES_FILE):
         with open(NAMES_FILE, 'r') as f:
@@ -43,7 +43,7 @@ async def callme(bot, message):
     /callme name
     ```"""
 
-    author_id = message.author.id
+    author_id = str(message.author.id)
     new_name = message.content[8:].strip()
 
     with open(NAMES_FILE, 'r') as f:

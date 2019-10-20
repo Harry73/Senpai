@@ -1,26 +1,26 @@
 import asyncio
+import discord
 import functools
 import logging
 import os
 import random
 import shutil
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor
-
-import discord
 import youtube_dl
+
+from collections import deque
 
 from lib.Command import CommandType, register_command
 from lib.Message import Message
 
-LOG = logging.getLogger('Senpai')
 
-# Lots of options used by Downloader class
-ytdl_format_options = {
+LOG = logging.getLogger('Senpai')
+AUDIO_CACHE_DIR = 'audio_cache'
+
+YTDL_FORMAT_OPTIONS = {
     'format': 'bestaudio/best',
     'extractaudio': True,
     'audioformat': 'mp3',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'outtmpl': os.path.join(AUDIO_CACHE_DIR, '%(extractor)s-%(id)s-%(title)s.%(ext)s'),
     'restrictfilenames': True,
     'noplaylist': True,
     'nocheckcertificate': True,
@@ -32,189 +32,106 @@ ytdl_format_options = {
     'source_address': '0.0.0.0'
 }
 
+FFMPEG_OPTIONS = {
+    'options': '-vn'
+}
+
 # Load the magical opus
 if not discord.opus.is_loaded():
     discord.opus.load_opus('opus')
 
+YT_DL = youtube_dl.YoutubeDL(YTDL_FORMAT_OPTIONS)
+
 
 # Encapsulates a YoutubeDL object and makes it nicer
-class Downloader:
+class YtdlSource(discord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, file_to_clean_up=None, url=None, volume=0.5):
+        super().__init__(source, volume)
 
-    def __init__(self, download_folder=None):
-        self.thread_pool = ThreadPoolExecutor(max_workers=2)
-        self.unsafe_ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
-        self.safe_ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
-        self.safe_ytdl.params['ignoreerrors'] = True
-        self.download_folder = download_folder
+        self.data = data
 
-        if download_folder:
-            otmpl = self.unsafe_ytdl.params['outtmpl']
-            self.unsafe_ytdl.params['outtmpl'] = os.path.join(download_folder, otmpl)
+        # Set information for clean up
+        self.file_to_clean_up = file_to_clean_up
 
-            otmpl = self.safe_ytdl.params['outtmpl']
-            self.safe_ytdl.params['outtmpl'] = os.path.join(download_folder, otmpl)
+        # Set information for now-playing command
+        self.title = data.get('title')
+        self.url = url
 
-    @property
-    def ytdl(self):
-        return self.safe_ytdl
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: YT_DL.extract_info(url, download=not stream))
 
-    async def extract_info(self, loop, *args, on_error=None, retry_on_error=False, **kwargs):
-        """
-            Runs ytdl.extract_info within the threadpool. Returns a future that will fire when it's done.
-            If `on_error` is passed and an exception is raised, the exception will be caught and passed to
-            on_error as an argument.
-        """
-        if callable(on_error):
-            try:
-                return await loop.run_in_executor(
-                    self.thread_pool,
-                    functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs)
-                )
+        if 'entries' in data:
+            # take first item from a playlist
+            data = data['entries'][0]
 
-            except Exception as e:
+        filename = data['url'] if stream else YT_DL.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data, file_to_clean_up=filename, url=url)
 
-                # (youtube_dl.utils.ExtractorError, youtube_dl.utils.DownloadError)
-                if asyncio.iscoroutinefunction(on_error):
-                    asyncio.ensure_future(on_error(e), loop=loop)
-
-                elif asyncio.iscoroutine(on_error):
-                    asyncio.ensure_future(on_error, loop=loop)
-
-                else:
-                    loop.call_soon_threadsafe(on_error, e)
-
-                if retry_on_error:
-                    return await self.safe_extract_info(loop, *args, **kwargs)
-        else:
-            return await loop.run_in_executor(
-                self.thread_pool,
-                functools.partial(self.unsafe_ytdl.extract_info, *args, **kwargs)
-            )
-
-    async def safe_extract_info(self, loop, *args, **kwargs):
-        return await loop.run_in_executor(
-            self.thread_pool,
-            functools.partial(self.safe_ytdl.extract_info, *args, **kwargs)
-        )
+    def cleanup(self):
+        super().cleanup()
+        os.remove(self.file_to_clean_up)
 
 
-# Encapsulates a player for a song or mp3
-class VoiceEntry:
-
-    def __init__(self, message, player):
-        self.requester = message.author
-        self.channel = message.channel
-        self.player = player
-
-    def __str__(self):
-        if hasattr(self.player, 'url'):
-            fmt = '{0.url}'
-            return fmt.format(self.player)
-        else:
-            return 'something I do not recognize?'
+def _get_client(bot, guild):
+    return discord.utils.get(bot.voice_clients, guild=guild)
 
 
-# Contains the music queues of VoiceEntry's and manages the player
-class VoiceState:
+def _play_next(voice_client, exception):
+    if exception:
+        LOG.error('Player error: %s' % exception)
 
-    def __init__(self, bot):
-        self.current = None
-        self.voice = None
-        self.bot = bot
-        self.play_next_song = asyncio.Event()
-        self.songs = asyncio.Queue()
-        self.songs_queue = deque()
-        self.audio_player = self.bot.loop.create_task(self.audio_player_task())
+    if not hasattr(voice_client, 'song_queue'):
+        LOG.info('Voice client has no song queue')
+        return
 
-    def is_playing(self):
-        if self.voice is None or self.current is None:
-            return False
+    if not voice_client.song_queue:
+        LOG.info('No more queued songs to play')
+        return
 
-        player = self.current.player
-        return not player.is_done()
-
-    @property
-    def player(self):
-        return self.current.player
-
-    def skip(self):
-        if self.is_playing():
-            self.player.stop()
-
-    def toggle_next(self, last_song_filename):
-        # Remove last song played
-        if last_song_filename:
-            if os.path.isfile(last_song_filename):
-                os.remove(last_song_filename)
-
-        self.bot.loop.call_soon_threadsafe(self.play_next_song.set)
-
-    async def audio_player_task(self):
-        while True:
-            self.play_next_song.clear()
-            self.current = await self.songs.get()
-            self.songs_queue.popleft()
-            LOG.debug('now playing %s', str(self.current))
-            self.current.player.start()
-            await self.play_next_song.wait()
+    source = voice_client.song_queue.popleft()
+    voice_client.play(source, after=functools.partial(_play_next, voice_client))
 
 
-# Voice related command helpers
-def _get_voice_state(bot, server):
-    state = bot.voice_states.get(server.id)
-    if state is None:
-        state = VoiceState(bot)
-        bot.voice_states[server.id] = state
+def _play_or_queue(voice_client, source):
+    if not hasattr(voice_client, 'song_queue'):
+        voice_client.song_queue = deque()
 
-    return state
-
-
-def __unload(bot):
-    for state in bot.voice_states.values():
-        try:
-            state.audio_player.cancel()
-            if state.voice:
-                bot.loop.create_task(state.voice.disconnect())
-        finally:
-            pass
+    if voice_client.is_playing():
+        voice_client.song_queue.append(source)
+    else:
+        voice_client.play(source, after=functools.partial(_play_next, voice_client))
 
 
 # Plays a clip song. If something is playing, the request will be queued
 # Also automatically searches YouTube for the song
 async def _play_mp3(bot, message, clip: str):
     # Requester must be in a voice channel to use '/<sound>' command
-    if message.author.voice_channel is None:
+    if message.author.voice.channel is None:
         return Message(message='You are not in a voice channel.')
 
-    state = _get_voice_state(bot, message.server)
+    voice_client = _get_client(bot, message.guild)
 
-    if state.voice is None:
+    if voice_client is None:
         response = await summon(bot, message)
         if response:
             return response
+        else:
+            voice_client = _get_client(bot, message.guild)
 
-    try:
-        player = state.voice.create_ffmpeg_player(
-            'sounds/{0}.mp3'.format(clip),
-            after=lambda: state.toggle_next(None)
-        )
-        player.url = 'Sound clip - {0}'.format(clip)
-        player.title = 'Sound clip - {0}'.format(clip)
-    except Exception as e:
-        LOG.exception(e)
-    else:
-        player.volume = 0.6
-        entry = VoiceEntry(message, player)
-        await state.songs.put(entry)
-        state.songs_queue.append(entry)
+    source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('sounds/{0}.mp3'.format(clip)))
+    # add information for now-playing command
+    source.title = 'Sound clip - {0}'.format(clip)
+    source.url = None
+    _play_or_queue(voice_client, source)
 
 
 # Resumes the currently playing song, internal method
 async def _resume(bot, message):
-    state = _get_voice_state(bot, message.server)
-    if state.is_playing():
-        player = state.player
-        player.resume()
+    voice_client = _get_client(bot, message.guild)
+    if voice_client:
+        voice_client.resume()
 
 
 # Voice related commands
@@ -229,15 +146,16 @@ async def summon(bot, message):
     * /summon
     ```"""
 
-    summoned_channel = message.author.voice_channel
-    if summoned_channel is None:
+    if message.author.voice is None or message.author.voice.channel is None:
         return Message(message='You are not in a voice channel')
 
-    state = _get_voice_state(bot, message.server)
-    if state.voice is None:
-        state.voice = await bot.join_voice_channel(summoned_channel)
-    else:
-        await state.voice.move_to(summoned_channel)
+    summoned_voice_channel = message.author.voice.channel
+    voice_client = _get_client(bot, message.guild)
+
+    if voice_client is None:
+        await summoned_voice_channel.connect()
+    elif voice_client.channel != summoned_voice_channel:
+        await voice_client.move_to(summoned_voice_channel)
 
 
 # Plays a song. If something is playing, the request will be queued
@@ -256,8 +174,8 @@ async def play(bot, message):
     ```"""
 
     # Requester must be in a voice channel to use '/play' command
-    if message.author.voice_channel is None:
-        return Message(message='You are not in a voice channel.')
+    if message.author.voice is None or message.author.voice.channel is None:
+        return Message(message='You are not in a voice channel')
 
     song_and_count = message.content[6:].strip()
 
@@ -265,13 +183,15 @@ async def play(bot, message):
         await _resume(bot, message)
         return {}
 
-    state = _get_voice_state(bot, message.server)
+    voice_client = _get_client(bot, message.guild)
 
     # Bring Senpai to the voice channel if she's not already in it
-    if state.voice is None or str(message.author.voice_channel) != str(state.voice.channel):
-        response = await summon(message)
+    if voice_client is None or message.author.voice.channel != voice_client.channel:
+        response = await summon(bot, message)
         if response:
             return response
+        else:
+            voice_client = _get_client(bot, message.guild)
 
     # See if a number of times to play ths song is specified
     pieces = song_and_count.split()
@@ -290,41 +210,9 @@ async def play(bot, message):
         count = 25
 
     for i in range(count):
-        try:
-            # Check info
-            info = await bot.downloader.extract_info(bot.loop, song, download=False)
-
-            if not info:
-                LOG.warning('failed to extract info for %s', song)
-                return Message(message='Failed to extract info from the video')
-            else:
-                if 'entries' in info:
-                    info = info['entries'][0]
-
-                song_url = info['webpage_url']
-                LOG.debug('song url %s', song_url)
-
-                result = await bot.downloader.safe_extract_info(bot.loop, song_url, download=True)
-                if not result:
-                    raise Exception('Death, and idk why')
-
-                # Get filename and then create player for the file
-                filename = bot.downloader.ytdl.prepare_filename(result)
-                player = state.voice.create_ffmpeg_player(
-                    filename,
-                    before_options='-nostdin',
-                    options='-vn -b:a 128k',
-                    after=lambda: state.toggle_next(filename)
-                )
-                player.url = song
-                player.title = result['title']
-        except Exception as e:
-            LOG.exception(e)
-        else:
-            player.volume = 0.6
-            entry = VoiceEntry(message, player)
-            await state.songs.put(entry)
-            state.songs_queue.append(entry)
+        source = await YtdlSource.from_url(song, loop=bot.loop)
+        source.url = song
+        _play_or_queue(voice_client, source)
 
 
 # Pauses the currently playing song
@@ -337,10 +225,9 @@ async def pause(bot, message):
     * /pause
     ```"""
 
-    state = _get_voice_state(bot, message.server)
-    if state.is_playing():
-        player = state.player
-        player.pause()
+    voice_client = _get_client(bot, message.guild)
+    if voice_client.is_playing():
+        voice_client.pause()
 
 
 # Return a list of song titles in the queue
@@ -353,18 +240,13 @@ async def queue(bot, message):
     * /queue
     ```"""
 
-    state = _get_voice_state(bot, message.server)
+    voice_client = _get_client(bot, message.guild)
 
-    if state.songs_queue:
-        song_list = []
-        for song in state.songs_queue:
-            if hasattr(song.player, 'title'):
-                song_list.append(song.player.title)
-
+    response = 'No songs queued'
+    if voice_client and hasattr(voice_client, 'song_queue') and voice_client.song_queue:
+        song_list = [song.title for song in voice_client.song_queue]
         response = 'Songs currently in the queue:\n'
         response += '\n'.join(song_list)
-    else:
-        response = 'No songs queued'
 
     return Message(message=response)
 
@@ -381,12 +263,12 @@ async def np(bot, message):
     * /playing
     ```"""
 
-    state = _get_voice_state(bot, message.server)
+    voice_client = _get_client(bot, message.guild)
 
-    if state.current:
-        return Message(message='Now playing: {0}'.format(state.current.player.title))
-    else:
-        return Message(message='Not playing any music right now...')
+    if voice_client is None or not voice_client.is_playing():
+        return Message(message='Not playing any music right now')
+
+    return Message(message='Now playing: {0}\n{1}'.format(voice_client.source.title, voice_client.source.url))
 
 
 @register_command(lambda m: m.content == '/skip', command_type=CommandType.VOICE)
@@ -398,11 +280,12 @@ async def skip(bot, message):
     * /skip
     ```"""
 
-    state = _get_voice_state(bot, message.server)
-    if not state.is_playing():
-        return Message(message='Not playing any music right now...')
+    voice_client = _get_client(bot, message.guild)
+    if voice_client is None or not voice_client.is_playing():
+        return Message(message='Not playing any music right now')
 
-    state.skip()
+    voice_client.stop()
+    _play_next(voice_client, None)
 
 
 # Stops the song and clears the queue
@@ -415,14 +298,12 @@ async def stop(bot, message):
     * /stop
     ```"""
 
-    server = message.server
-    state = _get_voice_state(bot, server)
+    voice_client = _get_client(bot, message.guild)
 
-    if state.is_playing():
-        player = state.player
-        player.stop()
-        state.songs = asyncio.Queue()
-        state.songs_queue = deque()
+    if voice_client:
+        if hasattr(voice_client, 'song_queue'):
+            voice_client.song_queue = deque()
+        voice_client.stop()
 
 
 # Stops the song, clears the queue, and leaves the channel
@@ -435,23 +316,13 @@ async def gtfo(bot, message):
     * /gtfo
     ```"""
 
-    server = message.server
-    state = _get_voice_state(bot, server)
+    voice_client = message.guild.voice_client
 
-    if state.is_playing():
-        player = state.player
-        player.stop()
+    await voice_client.disconnect()
 
-    try:
-        state.audio_player.cancel()
-        del bot.voice_states[server.id]
-        await state.voice.disconnect()
-
-        # Delete old audio files
-        if os.path.isdir('audio_cache'):
-            shutil.rmtree('./audio_cache')
-    finally:
-        pass
+    # Delete old audio files
+    if os.path.isdir('audio_cache'):
+        shutil.rmtree('./audio_cache')
 
 
 # Commands that require the list of sound clips

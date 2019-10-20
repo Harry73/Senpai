@@ -262,7 +262,7 @@ async def stats():
     return string
 
 
-@register_command(lambda m: m.content.startswith('/roll'))
+@register_command(lambda m: m.content.startswith('/roll') or m.content.startswith('/r '))
 async def roll(bot, message):
     """```
     Roll20-like dice rolling. Any roll command is limited to 1000 total dice.
@@ -273,17 +273,12 @@ async def roll(bot, message):
     * /roll        -> can be shortened to '/r'
     ```"""
 
-    return await parse_roll(message.content[6:].strip())
+    if message.content.startswith('/roll'):
+        expression = message.content[6:].strip()
+    elif message.content.startswith('/r '):
+        expression = message.content[3:].strip()
+    else:
+        LOG.error('Roll without /r or /roll')
+        return
 
-
-@register_command(lambda m: m.content.startswith('/r '))
-async def r(bot, message):
-    """```
-    Roll20-like dice rolling. Any roll command is limited to 1000 total dice.
-
-    Usages:
-    * /r NdM    -> roll an M-sided die N times and add the results
-    * /r stats  -> will perform 6 rolls that can be used as stats for D&D 5e.
-    ```"""
-
-    return await parse_roll(message.content[3:].strip())
+    return await parse_roll(expression)
