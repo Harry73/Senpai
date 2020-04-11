@@ -1,10 +1,12 @@
 import asyncio
+import ctypes
 import discord
 import functools
 import logging
 import os
 import random
 import shutil
+import uuid
 import youtube_dl
 
 from collections import deque
@@ -38,7 +40,8 @@ FFMPEG_OPTIONS = {
 
 # Load the magical opus
 if not discord.opus.is_loaded():
-    discord.opus.load_opus('opus')
+    lib = ctypes.util.find_library('opus')
+    discord.opus.load_opus(lib)
 
 YT_DL = youtube_dl.YoutubeDL(YTDL_FORMAT_OPTIONS)
 
@@ -55,23 +58,23 @@ class YtdlSource(discord.PCMVolumeTransformer):
 
         # Set information for now-playing command
         self.title = data.get('title')
-        self.url = url
-
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: YT_DL.extract_info(url, download=not stream))
-
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-
-        filename = data['url'] if stream else YT_DL.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data, file_to_clean_up=filename, url=url)
+        self.url_link = data.get('webpage_url', url)
 
     def cleanup(self):
         super().cleanup()
-        os.remove(self.file_to_clean_up)
+        if os.path.isfile(self.file_to_clean_up):
+            os.remove(self.file_to_clean_up)
+
+    @classmethod
+    async def download(cls, url, loop=None):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: YT_DL.extract_info(url, download=True))
+
+        # take first item from a playlist
+        if 'entries' in data:
+            data = data['entries'][0]
+
+        return data, YT_DL.prepare_filename(data)
 
 
 def _get_client(bot, guild):
@@ -91,6 +94,7 @@ def _play_next(voice_client, exception):
         return
 
     source = voice_client.song_queue.popleft()
+    LOG.info('Playing next: %s' % source.title)
     voice_client.play(source, after=functools.partial(_play_next, voice_client))
 
 
@@ -101,6 +105,7 @@ def _play_or_queue(voice_client, source):
     if voice_client.is_playing():
         voice_client.song_queue.append(source)
     else:
+        LOG.info('Playing: %s' % source.title)
         voice_client.play(source, after=functools.partial(_play_next, voice_client))
 
 
@@ -123,7 +128,7 @@ async def _play_mp3(bot, message, clip: str):
     source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio('sounds/{0}.mp3'.format(clip)))
     # add information for now-playing command
     source.title = 'Sound clip - {0}'.format(clip)
-    source.url = None
+    source.url_link = None
     _play_or_queue(voice_client, source)
 
 
@@ -132,6 +137,10 @@ async def _resume(bot, message):
     voice_client = _get_client(bot, message.guild)
     if voice_client:
         voice_client.resume()
+
+
+def uniquify(file_path):
+    return os.path.join(os.path.dirname(file_path), '%s-%s' % (uuid.uuid4(), os.path.basename(file_path)))
 
 
 # Voice related commands
@@ -209,8 +218,23 @@ async def play(bot, message):
     elif count > 25:
         count = 25
 
-    for i in range(count):
-        source = await YtdlSource.from_url(song, loop=bot.loop)
+    data, original_file = await YtdlSource.download(song, loop=bot.loop)
+    file_names = []
+
+    def clone_file(method):
+        unique_file_name = uniquify(original_file)
+        method(original_file, unique_file_name)
+        file_names.append(unique_file_name)
+
+    # Make "count - 1" copies of the file and then move the original file to one with a unique name.
+    for i in range(count - 1):
+        clone_file(shutil.copy)
+    clone_file(shutil.move)
+
+    # Play each file separately. This process is cope with a song being played multiple times in a row nicely.
+    for file_name in file_names:
+        source = YtdlSource(discord.FFmpegPCMAudio(file_name, **FFMPEG_OPTIONS), data=data,
+                            file_to_clean_up=file_name, url=song)
         source.url = song
         _play_or_queue(voice_client, source)
 
@@ -268,7 +292,7 @@ async def np(bot, message):
     if voice_client is None or not voice_client.is_playing():
         return Message(message='Not playing any music right now')
 
-    return Message(message='Now playing: {0}\n{1}'.format(voice_client.source.title, voice_client.source.url))
+    return Message(message='Now playing: {0}\n{1}'.format(voice_client.source.title, voice_client.source.url_link))
 
 
 @register_command(lambda m: m.content == '/skip', command_type=CommandType.VOICE)
@@ -316,8 +340,9 @@ async def gtfo(bot, message):
     * /gtfo
     ```"""
 
-    voice_client = message.guild.voice_client
+    await stop(bot, message)
 
+    voice_client = message.guild.voice_client
     await voice_client.disconnect()
 
     # Delete old audio files

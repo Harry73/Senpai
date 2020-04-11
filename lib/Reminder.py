@@ -5,6 +5,7 @@ import pytz
 import uuid
 
 from datetime import datetime, timedelta
+from ratelimiter import RateLimiter
 
 from lib import Ids
 from lib.Command import register_command
@@ -118,6 +119,7 @@ class ReminderEventHandler(EventHandler):
 
     # Remind someone, or multiple people, about something.
     # The event, as set up by the remind command, contains all the values needed to send the reminder.
+    @RateLimiter(max_calls=1, period=20)
     async def run(self):
         LOG.debug('starting remind task')
 

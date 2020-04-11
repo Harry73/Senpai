@@ -108,7 +108,7 @@ class DndPingEventHandler(DndEventHandler):
         # Convert players to mentions, removing duplicates
         mentions = []
         for player in set(players):
-            user = await self.bot.get_user(Ids.NAMES_TO_USERS[player])
+            user = self.bot.get_user(Ids.NAMES_TO_USERS[player])
             mentions.append(user.mention)
 
         if mentions:
@@ -143,7 +143,7 @@ class DndBotherEventHandler(DndEventHandler):
         # Convert to user ids
         users = []
         for player in players:
-            user = await self.bot.get_user(Ids.NAMES_TO_USERS[player])
+            user = self.bot.get_user(Ids.NAMES_TO_USERS[player])
             users.append(user.id)
 
         # Get tracking info in datetime objects
@@ -159,7 +159,7 @@ class DndBotherEventHandler(DndEventHandler):
         mentions = []
         for user, last_message_time in channel_tracking.items():
             if now > last_message_time + timedelta(days=1):
-                member = await self.bot.get_user(Ids.NAMES_TO_USERS[user])
+                member = self.bot.get_user(Ids.NAMES_TO_USERS[user])
                 mentions.append(member.mention)
 
         if mentions:
