@@ -30,7 +30,7 @@ def handle_event(event, bot):
         return
 
     handler = None
-    elif event['handler'] == 'dnd_ping':
+    if event['handler'] == 'dnd_ping':
         handler = DndPingEventHandler(event, bot)
     elif event['handler'] == 'dnd_bother':
         handler = DndBotherEventHandler(event, bot)
@@ -42,4 +42,3 @@ def handle_event(event, bot):
         return
 
     bot.loop.create_task(handler.handle())
-

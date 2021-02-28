@@ -54,4 +54,4 @@ async def translate(bot, message):
             return Message(message='Usage: /translate <text>')
 
     except Exception as e:
-        LOG.exception(e)
+        LOG.error('Error translating', exc_info=e)

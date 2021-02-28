@@ -102,8 +102,8 @@ class EventHandler:
                     task = self.bot.loop.create_task(self.run())
                     await task
                 except Exception as e:
-                    LOG.exception('task %s failed to run at %s.\nError: %s',
-                                  self.name, tm, e)
+                    LOG.error('task %s failed to run at %s, error:', self.name, tm, exc_info=e)
+
                 else:
                     # Mark event as successful if there were no errors
                     self.write_timing_info(tm.tm_mday, True)

@@ -187,7 +187,7 @@ async def parse_roll(dice_string):
         dice_array = split_array(dice_array, '(')
         dice_array = split_array(dice_array, ')')
     except Exception as e:
-        LOG.exception(e)
+        LOG.error('Error splitting dice', exc_info=e)
         return Message(message='Ask Ian about whatever you just tried to do')
 
     # Roll for an NdM parts and substitute in the result in parenthesis
@@ -205,7 +205,7 @@ async def parse_roll(dice_string):
                     LOG.debug('numbers too big')
                     return Message(message='You ask for too much.')
                 else:
-                    LOG.exception(e)
+                    LOG.error('Unknown dice error', exc_info=e)
                     return Message(message='Ask Ian about whatever you just tried to do')
 
     result_string = ''.join(dice_array)

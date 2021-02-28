@@ -28,4 +28,4 @@ async def profile(bot, message):
                     else:
                         LOG.error('bad status: %s', r.status)
         except Exception as e:
-            LOG.exception(e)
+            LOG.error('Error updating profile image', exc_info=e)

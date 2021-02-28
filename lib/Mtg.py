@@ -3,6 +3,7 @@ import re
 import string
 
 from mtgsdk import Card
+from mtgsdk.restclient import MtgException
 
 from lib import Ids
 from lib.Command import register_command
@@ -75,8 +76,11 @@ def _mtg_find_card(search_key):
             cards.sort(key=lambda x: 0 if x.multiverse_id is None else x.multiverse_id, reverse=True)
             return Message(message=cards[0].image_url, cleanup_original=False, cleanup_self=False)
 
+    except MtgException as e:
+        LOG.error('MTG API error', exc_info=e)
+        return Message(message='MTG API error, it might be down')
     except Exception as e:
-        LOG.exception(e)
+        LOG.error('Unexpected MTG error', exc_info=e)
         return Message(message='Something broke, ask Ian about the card you were looking for',
                        cleanup_original=False, cleanup_self=False)
 

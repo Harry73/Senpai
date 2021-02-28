@@ -7,7 +7,7 @@ import os
 import random
 import shutil
 import uuid
-import youtube_dl
+import youtube_dlc
 
 from collections import deque
 
@@ -43,7 +43,7 @@ if not discord.opus.is_loaded():
     lib = ctypes.util.find_library('opus')
     discord.opus.load_opus(lib)
 
-YT_DL = youtube_dl.YoutubeDL(YTDL_FORMAT_OPTIONS)
+YT_DL = youtube_dlc.YoutubeDL(YTDL_FORMAT_OPTIONS)
 
 
 # Encapsulates a YoutubeDL object and makes it nicer
@@ -83,7 +83,7 @@ def _get_client(bot, guild):
 
 def _play_next(voice_client, exception):
     if exception:
-        LOG.error('Player error: %s' % exception)
+        LOG.error('Player error', exc_info=exception)
 
     if not hasattr(voice_client, 'song_queue'):
         LOG.info('Voice client has no song queue')
@@ -231,7 +231,7 @@ async def play(bot, message):
         clone_file(shutil.copy)
     clone_file(shutil.move)
 
-    # Play each file separately. This process is cope with a song being played multiple times in a row nicely.
+    # Play each file separately. This process is to cope with a song being played multiple times in a row nicely.
     for file_name in file_names:
         source = YtdlSource(discord.FFmpegPCMAudio(file_name, **FFMPEG_OPTIONS), data=data,
                             file_to_clean_up=file_name, url=song)
